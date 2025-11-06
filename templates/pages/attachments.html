@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}Anexos{% endblock %}
+{% block content %}
+<div class="py-3">
+  <h2 class="h4 mb-1">Transferência de Anexos</h2>
+  <p class="text-gray-600">Dispare manualmente uma transferência de anexos entre registros usando o serviço da API.</p>
+</div>
+<div class="row">
+  <div class="col-12 col-lg-8">
+    <div class="card bg-white shadow border-0 rounded border-light mb-4">
+      <div class="card-body p-4 p-lg-5">
+        <h6 class="mb-3">Transferir anexos entre registros</h6>
+        <form id="form-transferir" class="row g-3">
+          <div class="col-sm-6">
+            <label class="form-label" for="origem_id">Origem ID</label>
+            <div class="input-group">
+              <input class="form-control" type="number" id="origem_id" required />
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label" for="destino_id">Destino ID</label>
+            <div class="input-group">
+              <input class="form-control" type="number" id="destino_id" required />
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label" for="origem_tabela">Origem cTabela</label>
+            <input class="form-control" id="origem_tabela" value="com-recebimento" />
+            <div class="form-text">Ex.: com-recebimento, pedido-compra</div>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label" for="destino_tabela">Destino cTabela</label>
+            <input class="form-control" id="destino_tabela" value="conta_a_pagar" />
+          </div>
+          <div class="col-12 d-flex align-items-center">
+            <div class="form-check me-3">
+              <input class="form-check-input" type="checkbox" id="assincrono">
+              <label class="form-check-label" for="assincrono">Processar em segundo plano</label>
+            </div>
+            <button class="btn btn-gray-800" type="submit">Transferir</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card bg-white shadow border-0 rounded border-light mb-4">
+      <div class="card-body p-4 p-lg-5">
+        <h6 class="mb-3">Incluir anexo (upload base64)</h6>
+        <form id="form-incluir" class="row g-3">
+          <div class="col-sm-4">
+            <label class="form-label" for="inc_tabela">cTabela</label>
+            <input class="form-control" id="inc_tabela" value="pedido-compra" />
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label" for="inc_nid">nId</label>
+            <input class="form-control" id="inc_nid" type="number" />
+          </div>
+          <div class="col-sm-4">
+            <label class="form-label" for="inc_nome">Nome do arquivo</label>
+            <input class="form-control" id="inc_nome" placeholder="documento.pdf" />
+          </div>
+          <div class="col-12">
+            <label class="form-label" for="inc_file">Arquivo PDF</label>
+            <input class="form-control" id="inc_file" type="file" accept="application/pdf" />
+            <div class="form-text">O arquivo será convertido para Base64 no navegador.</div>
+          </div>
+          <div class="col-12">
+            <button class="btn btn-primary" type="submit">Enviar Anexo</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="resultado" class="d-none">
+      <div class="alert" role="alert"></div>
+      <pre class="bg-light p-3 border rounded small"></pre>
+    </div>
+  </div>
+  <div class="col-12 col-lg-4">
+    <div class="card bg-white shadow border-0 rounded border-light">
+      <div class="card-body">
+        <h6 class="mb-2">Endpoints</h6>
+        <ul class="list-unstyled small text-muted mb-0">
+          <li>POST {{ api_transferir_url }}</li>
+          <li>Base: {{ api_base }}</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function() {
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+  const csrftoken = getCookie('csrftoken');
+          const form = document.getElementById('form-transferir');
+  const container = document.getElementById('resultado');
+  const alertBox = container.querySelector('.alert');
+  const pre = container.querySelector('pre');
+
+  form.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const origem_id = document.getElementById('origem_id').value;
+    const destino_id = document.getElementById('destino_id').value;
+    const origem_tabela = document.getElementById('origem_tabela').value || 'com-recebimento';
+    const destino_tabela = document.getElementById('destino_tabela').value || 'conta_a_pagar';
+    const assincrono = document.getElementById('assincrono').checked;
+
+    alertBox.className = 'alert alert-info';
+    alertBox.textContent = 'Processando...';
+    pre.textContent = '';
+    container.classList.remove('d-none');
+
+    try {
+      const resp = await fetch('{{ api_transferir_url }}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrftoken
+        },
+        body: JSON.stringify({ origem_id: origem_id, destino_id: destino_id, origem_tabela: origem_tabela, destino_tabela: destino_tabela, assincrono: assincrono })
+      });
+      const data = await resp.json();
+      if (resp.ok) {
+        alertBox.className = 'alert alert-success';
+        alertBox.textContent = 'Operação realizada com sucesso';
+      } else {
+        alertBox.className = 'alert alert-danger';
+        alertBox.textContent = 'Falha na operação';
+      }
+      pre.textContent = JSON.stringify(data, null, 2);
+    } catch (err) {
+      alertBox.className = 'alert alert-danger';
+      alertBox.textContent = 'Erro de rede ou servidor';
+      pre.textContent = String(err);
+    }
+  });
+
+  // Inclusão (upload) de anexo com conversão Base64
+  const formInc = document.getElementById('form-incluir');
+  formInc.addEventListener('submit', async function(e){
+    e.preventDefault();
+    const tabela = document.getElementById('inc_tabela').value;
+    const n_id = document.getElementById('inc_nid').value;
+    const nome = document.getElementById('inc_nome').value;
+    const fileInput = document.getElementById('inc_file');
+    const file = fileInput.files && fileInput.files[0];
+    if(!file){
+      alert('Selecione um arquivo PDF.');
+      return;
+    }
+    const toBase64 = (file) => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = error => reject(error);
+    });
+    alertBox.className = 'alert alert-info';
+    alertBox.textContent = 'Enviando anexo...';
+    pre.textContent = '';
+    container.classList.remove('d-none');
+    try{
+      const base64 = await toBase64(file);
+      const resp = await fetch('{{ api_base }}incluir/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+        body: JSON.stringify({ tabela: tabela, n_id: n_id, nome_arquivo: nome, arquivo_base64: base64 })
+      });
+      const data = await resp.json();
+      if (resp.ok) {
+        alertBox.className = 'alert alert-success';
+        alertBox.textContent = 'Anexo enviado com sucesso';
+      } else {
+        alertBox.className = 'alert alert-danger';
+        alertBox.textContent = 'Falha ao enviar anexo';
+      }
+      pre.textContent = JSON.stringify(data, null, 2);
+    } catch(err){
+      alertBox.className = 'alert alert-danger';
+      alertBox.textContent = 'Erro ao enviar anexo';
+      pre.textContent = String(err);
+    }
+  });
+})();
+</script>
+{% endblock %}

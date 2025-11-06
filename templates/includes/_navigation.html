@@ -1,0 +1,71 @@
+<!-- Sidebar (Volt layout) -->
+<nav id="sidebarMenu" class="sidebar d-lg-block bg-gray-800 text-white collapse" data-simplebar>
+  <div class="sidebar-inner px-4 pt-3">
+    <div class="user-card d-flex d-md-none align-items-center justify-content-between justify-content-md-center pb-4">
+      <div class="d-flex align-items-center">
+        <div class="d-block">
+          <h6 class="mb-0">Olá{% if user.is_authenticated %}, {{ user.get_username }}{% endif %}</h6>
+        </div>
+      </div>
+      <div class="collapse-close d-md-none">
+        <a href="#sidebarMenu" class="btn btn-close btn-close-white d-md-none" data-bs-toggle="collapse"
+           data-bs-target="#sidebarMenu" aria-controls="sidebarMenu" aria-expanded="true" aria-label="Toggle navigation"></a>
+      </div>
+    </div>
+    <ul class="nav flex-column pt-3 pt-md-0">
+      <li class="nav-item">
+        <a href="/home/" class="nav-link d-flex align-items-center">
+          <span class="sidebar-icon">🏠</span>
+          <span class="mt-1 ms-2 sidebar-text">Dashboard</span>
+        </a>
+      </li>
+      <li class="nav-item ">
+        <a href="/attachments/" class="nav-link d-flex align-items-center{% if request.resolver_match.url_name == 'attachments_page' %} active{% endif %}">
+          <span class="sidebar-icon">📎</span>
+          <span class="mt-1 ms-2 sidebar-text">Anexos</span>
+        </a>
+      </li>
+      <li class="nav-item ">
+        <a href="/purchase-orders/" class="nav-link d-flex align-items-center{% if request.resolver_match.url_name == 'purchase_orders_page' %} active{% endif %}">
+          <span class="sidebar-icon">📦</span>
+          <span class="mt-1 ms-2 sidebar-text">Pedidos de Compra</span>
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="/admin/" class="nav-link d-flex align-items-center">
+          <span class="sidebar-icon">⚙️</span>
+          <span class="mt-1 ms-2 sidebar-text">Admin</span>
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="/api/" class="nav-link d-flex align-items-center">
+          <span class="sidebar-icon">🧩</span>
+          <span class="mt-1 ms-2 sidebar-text">API</span>
+        </a>
+      </li>
+    </ul>
+  </div>
+</nav>
+
+<!-- Top navbar (Volt layout) -->
+<nav class="navbar navbar-top navbar-expand navbar-dashboard navbar-dark ps-0 pe-2 pb-0">
+  <div class="container-fluid px-0">
+    <div class="d-flex justify-content-between w-100" id="navbarSupportedContent">
+      <div class="d-flex align-items-center">
+        <button class="navbar-toggler d-lg-none" type="button" data-bs-toggle="collapse"
+                data-bs-target="#sidebarMenu" aria-controls="sidebarMenu" aria-expanded="false" aria-label="Toggle navigation">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <a class="navbar-brand ms-2" href="/home/">BackOffice</a>
+      </div>
+      <div class="navbar-nav align-items-center">
+        {% if user.is_authenticated %}
+          <span class="text-white-50 small me-2 d-none d-sm-inline">{{ user.get_username }}</span>
+          <a class="btn btn-outline-light btn-sm" href="/accounts/logout/">Sair</a>
+        {% else %}
+          <a class="btn btn-primary btn-sm" href="/accounts/login/?next={{ request.path }}">Entrar</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</nav>

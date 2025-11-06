@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Django
+*.log
+logs/
+staticfiles/
+media/
+local_settings.py
+
+# Environment variables and secrets
+.env
+.env.*
+*.env
+
+# IDEs and editors
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Migrations cache (keep migrations, but ignore pyc inside)
+**/migrations/__pycache__/
+
+# Coverage / testing
+htmlcov/
+.coverage*
+.pytest_cache/
+
+# Node (if any frontend)
+node_modules/

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Início{% endblock %}
+{% block content %}
+<div class="row">
+  <div class="col-12 col-xl-8">
+    <div class="card bg-white shadow border-0 rounded border-light mb-4">
+      <div class="card-body p-4 p-lg-5">
+        <h2 class="h4 mb-2">Bem-vindo</h2>
+        <p class="text-gray-600">Este projeto usa Django + Django REST Framework. Use os botões abaixo para navegar.</p>
+        <div class="d-flex gap-2">
+          <a class="btn btn-gray-800" href="/admin/">Abrir Admin</a>
+          <a class="btn btn-outline-secondary" href="/api/">Abrir API</a>
+          <a class="btn btn-outline-secondary" href="/attachments/">Anexos (UI)</a>
+          <a class="btn btn-outline-secondary" href="/purchase-orders/">Pedidos (UI)</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="card bg-white shadow border-0 rounded border-light mb-4">
+      <div class="card-body p-4 p-lg-5">
+        <h3 class="h5 mb-3">Funcionalidades</h3>
+        <ul class="mb-0">
+          <li><a href="/api/attachments/">Transferência de Anexos (API)</a></li>
+          <li><a href="/api/purchase-orders/">Encerramento de Pedidos (API)</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-xl-4">
+    <div class="card bg-white shadow border-0 rounded border-light mb-4">
+      <div class="card-body p-4 p-lg-5">
+        <h3 class="h5 mb-3">Primeiros passos</h3>
+        <ol class="mb-0">
+          <li>Executar migrações: <code>python manage.py migrate</code></li>
+          <li>Criar superusuário: <code>python manage.py createsuperuser</code></li>
+          <li>Fazer login em <code>/accounts/login/</code> e usar as funcionalidades.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

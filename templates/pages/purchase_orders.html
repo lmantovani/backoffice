@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Pedidos de Compra{% endblock %}
+{% block content %}
+<div class="py-3">
+  <h2 class="h4 mb-1">Encerramento de Pedidos de Compra</h2>
+  <p class="text-gray-600">Dispare manualmente o encerramento de um pedido de compra via API.</p>
+</div>
+<div class="row">
+  <div class="col-12 col-lg-8">
+    <div class="card bg-white shadow border-0 rounded border-light mb-4">
+      <div class="card-body p-4 p-lg-5">
+        <form id="form-encerrar" class="row g-3">
+          <div class="col-sm-6">
+            <label class="form-label" for="pedido_id">ID do Pedido</label>
+            <div class="input-group">
+              <input class="form-control" type="number" id="pedido_id" required />
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label" for="status">Status de Encerramento</label>
+            <div class="input-group">
+              <input class="form-control" type="text" id="status" placeholder="Encerrado" />
+            </div>
+          </div>
+          <div class="col-12 d-flex align-items-center">
+            <button class="btn btn-gray-800" type="submit">Encerrar Pedido</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div id="po-resultado" class="d-none">
+      <div class="alert" role="alert"></div>
+      <pre class="bg-light p-3 border rounded small"></pre>
+    </div>
+  </div>
+  <div class="col-12 col-lg-4">
+    <div class="card bg-white shadow border-0 rounded border-light">
+      <div class="card-body">
+        <h6 class="mb-2">Endpoints</h6>
+        <ul class="list-unstyled small text-muted mb-0">
+          <li>POST {{ api_base }}encerrar/</li>
+          <li>Base: {{ api_base }}</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function() {
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+  const csrftoken = getCookie('csrftoken');
+  const form = document.getElementById('form-encerrar');
+  const container = document.getElementById('po-resultado');
+  const alertBox = container.querySelector('.alert');
+  const pre = container.querySelector('pre');
+
+  form.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const pedido_id = document.getElementById('pedido_id').value;
+    const status = document.getElementById('status').value || 'Encerrado';
+
+    alertBox.className = 'alert alert-info';
+    alertBox.textContent = 'Processando...';
+    pre.textContent = '';
+    container.classList.remove('d-none');
+
+    try {
+      const resp = await fetch('{{ api_base }}encerrar/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrftoken
+        },
+        body: JSON.stringify({ pedido_id: pedido_id, status: status })
+      });
+      const data = await resp.json();
+      if (resp.ok) {
+        alertBox.className = 'alert alert-success';
+        alertBox.textContent = 'Operação realizada com sucesso';
+      } else {
+        alertBox.className = 'alert alert-danger';
+        alertBox.textContent = 'Falha na operação';
+      }
+      pre.textContent = JSON.stringify(data, null, 2);
+    } catch (err) {
+      alertBox.className = 'alert alert-danger';
+      alertBox.textContent = 'Erro de rede ou servidor';
+      pre.textContent = String(err);
+    }
+  });
+})();
+</script>
+{% endblock %}

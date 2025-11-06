@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Entrar{% endblock %}
+{% block navbar %}{% endblock %}
+{% block footer %}{% endblock %}
+{% block flash_messages %}{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* Remove any left offset reserved for the sidebar on public pages */
+  main.content { margin-left: 0 !important; padding-left: 0 !important; }
+  /* Ensure no hidden sidebar affects layout, even if present in DOM */
+  #sidebarMenu { display: none !important; }
+  /* Extra safety: center the main container strictly */
+  section.min-vh-100 .container { margin-left: auto !important; margin-right: auto !important; }
+</style>
+{% endblock %}
+
+{% block content_container %}
+<section class="min-vh-100 bg-soft d-flex align-items-center">
+  <div class="container">
+    <p class="text-center">
+      <a href="{% url 'home' %}" class="d-flex align-items-center justify-content-center">
+        <svg class="icon icon-xs me-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M7.707 14.707a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l2.293 2.293a1 1 0 010 1.414z" clip-rule="evenodd"></path></svg>
+        Voltar para a página inicial
+      </a>
+    </p>
+    <div class="row justify-content-center form-bg-image" data-background-lg="{% static 'volt/assets/img/illustrations/signin.svg' %}">
+      <div class="col-12 d-flex align-items-center justify-content-center">
+        <div class="bg-white shadow border-0 rounded border-light p-4 p-lg-5 w-100 fmxw-500">
+          <div class="text-center text-md-center mb-4 mt-md-0">
+            <h1 class="mb-0 h3">Acesse sua conta</h1>
+          </div>
+          {% if form.errors %}
+            <div class="alert alert-danger">Usuário e/ou senha inválidos. Tente novamente.</div>
+          {% endif %}
+          <form method="post" action="{% url 'login' %}" class="mt-4" novalidate autocomplete="on">
+            {% csrf_token %}
+            <div class="form-group mb-4">
+              <label for="id_username">E-mail ou Usuário</label>
+              <div class="input-group">
+                <span class="input-group-text" id="basic-addon1">
+                  <svg class="icon icon-xs text-gray-600" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"></path><path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"></path></svg>
+                </span>
+                <input type="text" class="form-control" name="username" id="id_username" placeholder="example@company.com" autofocus required>
+              </div>  
+            </div>
+            <div class="form-group mb-4">
+              <label for="id_password">Senha</label>
+              <div class="input-group">
+                <span class="input-group-text" id="basic-addon2">
+                  <svg class="icon icon-xs text-gray-600" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"></path></svg>
+                </span>
+                <input type="password" class="form-control" name="password" id="id_password" placeholder="Password" required>
+              </div>  
+            </div>
+            <div class="d-flex justify-content-between align-items-top mb-4">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" value="1" id="remember" name="remember">
+                <label class="form-check-label mb-0" for="remember">Lembrar de mim</label>
+              </div>
+              <div><a href="{% url 'password_reset' %}" class="small text-right">Esqueceu a senha?</a></div>
+            </div>
+            <input type="hidden" name="next" value="{{ next }}">
+            <div class="d-grid">
+              <button type="submit" class="btn btn-gray-800">Entrar</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    var els = document.querySelectorAll('[data-background-lg]');
+    els.forEach(function(el) {
+      if (window.innerWidth >= 992) {
+        var url = el.getAttribute('data-background-lg');
+        el.style.backgroundImage = 'url(' + url + ')';
+        el.style.backgroundRepeat = 'no-repeat';
+        el.style.backgroundPosition = 'center right';
+        el.style.backgroundSize = 'contain';
+      }
+    });
+  });
+</script>
+{% endblock %}
