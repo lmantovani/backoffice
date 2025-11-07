@@ -72,3 +72,38 @@ class PurchaseOrderClosureLog(models.Model):
     def pode_retentar(self):
         """Verifica se ainda pode retentar"""
         return self.tentativas < self.max_tentativas and self.status in ['pending', 'failed']
+
+class AttachmentSyncLog(models.Model):
+    METODO_CHOICES = (
+        ("robo", "Robô"),
+        ("sistema_full_flow", "Fluxo BackOffice"),
+    )
+
+    origem_tabela = models.CharField(max_length=100)
+    origem_id = models.BigIntegerField()
+
+    destino_tabela = models.CharField(max_length=100)
+    destino_id = models.BigIntegerField()
+
+    metodo = models.CharField(max_length=30, choices=METODO_CHOICES)
+
+    nome_arquivo = models.CharField(max_length=255)
+    status = models.CharField(
+        max_length=20,
+        choices=(
+            ("success", "Sucesso"),
+            ("failed", "Falha"),
+        ),
+    )
+    mensagem_erro = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["origem_tabela", "origem_id"]),
+            models.Index(fields=["destino_tabela", "destino_id"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.origem_tabela}:{self.origem_id} -> {self.destino_tabela}:{self.destino_id} [{self.status}]"

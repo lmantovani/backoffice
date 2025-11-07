@@ -1,5 +1,6 @@
 import requests
 import logging
+import base64
 from typing import Dict, List, Optional, Any
 from decouple import config
 
@@ -12,10 +13,151 @@ class OmieAPIException(Exception):
 
 
 class OmieAPIClient:
-    """
-    Cliente para consumir as APIs do Omie ERP
-    Documentação: https://developer.omie.com.br/
-    """
+    # assumindo que você já tem: self.app_key, self.app_secret, self.base_url e um helper _post()
+
+    def _post(self, endpoint: str, call: str, param: list):
+        """
+        Helper padrão Omie. Ajuste se o seu já for diferente.
+        """
+        url = f"{self.base_url}{endpoint}"
+        payload = {
+            "call": call,
+            "app_key": self.app_key,
+            "app_secret": self.app_secret,
+            "param": param,
+        }
+        resp = requests.post(url, json=payload, timeout=60)
+        resp.raise_for_status()
+        data = resp.json()
+        if "faultstring" in str(data):
+            logger.error("Erro Omie: %s", data)
+        return data
+
+    # ---------- Pedido de Compra ----------
+
+    def incluir_pedido_compra(self, pedido: dict) -> dict:
+        return self._post(
+            "/api/v1/produtos/pedidocompra/",
+            "IncluirPedCompra",
+            [pedido],
+        )
+
+    def consultar_pedido_compra(self, chave: dict) -> dict:
+        return self._post(
+            "/api/v1/produtos/pedidocompra/",
+            "ConsultarPedCompra",
+            [chave],
+        )
+
+    # ---------- Recebimentos / Notas de compra ----------
+
+    def listar_recebimentos(self, filtros: dict) -> dict:
+        """
+        Usa ListarRecebimentos para localizar nIdReceb, etc.
+        """
+        return self._post(
+            "/api/v1/produtos/recebimentonfe/",
+            "ListarRecebimentos",
+            [filtros],
+        )
+
+    # ---------- Contas a Pagar ----------
+
+    def incluir_conta_pagar(self, conta: dict) -> dict:
+        """
+        Use codigo_lancamento_integracao no payload para idempotência.
+        """
+        return self._post(
+            "/api/v1/financas/contapagar/",
+            "IncluirContaPagar",
+            [conta],
+        )
+
+    # ---------- Anexos genéricos ----------
+
+    def listar_anexos(self, c_tabela: str, n_id: int, pagina: int = 1, limite: int = 50) -> list:
+        data = {
+            "nPagina": pagina,
+            "nRegPorPagina": limite,
+            "cTabela": c_tabela,
+            "nId": n_id,
+        }
+        resp = self._post(
+            "/api/v1/geral/anexo/",
+            "ListarAnexo",
+            [data],
+        )
+        return resp.get("listaAnexos", [])
+
+    def obter_anexo(self, c_tabela: str, n_id: int, n_id_anexo: int = None, c_nome_arquivo: str = None) -> dict:
+        data = {
+            "cTabela": c_tabela,
+            "nId": n_id,
+        }
+        if n_id_anexo is not None:
+            data["nIdAnexo"] = n_id_anexo
+        if c_nome_arquivo:
+            data["cNomeArquivo"] = c_nome_arquivo
+
+        resp = self._post(
+            "/api/v1/geral/anexo/",
+            "ObterAnexo",
+            [data],
+        )
+        return resp
+
+    def incluir_anexo(self, c_tabela: str, n_id: int, nome_arquivo: str, arquivo_base64: str) -> dict:
+        data = {
+            "cTabela": c_tabela,
+            "nId": n_id,
+            "cNomeArquivo": nome_arquivo,
+            "cArquivo": arquivo_base64,
+        }
+        return self._post(
+            "/api/v1/geral/anexo/",
+            "IncluirAnexo",
+            [data],
+        )
+
+    def copiar_anexo(
+        self,
+        origem_tabela: str,
+        origem_id: int,
+        destino_tabela: str,
+        destino_id: int,
+        anexo_info: dict,
+    ) -> dict:
+        """
+        Utilitário: dado um item de listaAnexos da origem,
+        baixa e inclui igual no destino.
+        """
+        n_id_anexo = anexo_info.get("nIdAnexo")
+        nome_arquivo = anexo_info.get("cNomeArquivo")
+
+        detalhe = self.obter_anexo(
+            c_tabela=origem_tabela,
+            n_id=origem_id,
+            n_id_anexo=n_id_anexo,
+        )
+
+        conteudo_b64 = detalhe.get("cArquivo")
+
+        if not conteudo_b64 and detalhe.get("cLinkDownload"):
+            # baixa do link e converte
+            r = requests.get(detalhe["cLinkDownload"], timeout=60)
+            r.raise_for_status()
+            conteudo_b64 = base64.b64encode(r.content).decode()
+
+        if not conteudo_b64:
+            raise Exception("Não foi possível obter conteúdo do anexo na Omie.")
+
+        return self.incluir_anexo(
+            c_tabela=destino_tabela,
+            n_id=destino_id,
+            nome_arquivo=nome_arquivo,
+            arquivo_base64=conteudo_b64,
+        )
+
 
     def __init__(self):
         self.app_key = config('OMIE_APP_KEY')

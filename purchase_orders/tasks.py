@@ -1,8 +1,35 @@
 from celery import shared_task
 import logging
 from .services import PurchaseOrderClosureService
+from celery import shared_task
+
+from .services import PurchaseOrderRobotService, FullFlowPurchaseOrderService
+from .models import PurchaseOrderIntegration
 
 logger = logging.getLogger(__name__)
+
+
+@shared_task
+def robo_sincronizar_pedidos():
+    service = PurchaseOrderRobotService()
+    service.processar()
+    logger.info("Robô de sincronização de pedidos executado com sucesso.")
+
+
+@shared_task
+def full_flow_processar_pedidos_pendentes():
+    """
+    Procura pedidos criados pelo BackOffice que ainda não geraram financeiro
+    e tenta processar.
+    """
+    service = FullFlowPurchaseOrderService()
+    pendentes = PurchaseOrderIntegration.objects.filter(
+        origem="backoffice",
+        metodo_criacao__in=["sistema", "sistema_full_flow"],
+    )
+
+    for po in pendentes:
+        service.processar_pedido_para_financeiro(po)
 
 
 @shared_task(bind=True, max_retries=3)

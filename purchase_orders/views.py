@@ -2,9 +2,15 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .models import PurchaseOrderClosureLog
-from .services import PurchaseOrderClosureService
+from .models import PurchaseOrderClosureLog, PurchaseOrderIntegration, PurchaseOrderFinanceMap
+from .services import PurchaseOrderClosureService, PurchaseOrderRobotService
 from .tasks import encerrar_pedido_task
+
+from .serializers import (  # crie serializers simples ou ajuste
+    PurchaseOrderIntegrationSerializer,
+    PurchaseOrderFinanceMapSerializer,
+)
+
 import logging
 
 logger = logging.getLogger(__name__)

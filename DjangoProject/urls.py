@@ -17,14 +17,20 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from django.views.generic.base import RedirectView
-from rest_framework.routers import DefaultRouter
+from rest_framework.routers import DefaultRouter, routers
 from attachments.views import AttachmentTransferViewSet
 from purchase_orders.views import PurchaseOrderClosureViewSet
 from BackOffice import views as backoffice_views
+from purchase_orders.views import (
+    PurchaseOrderIntegrationViewSet,
+    PurchaseOrderFinanceMapViewSet,
+)
 
 router = DefaultRouter()
 router.register(r'attachments', AttachmentTransferViewSet, basename='attachment-transfer')
 router.register(r'purchase-orders', PurchaseOrderClosureViewSet, basename='purchase-order-closure')
+router.register(r"purchase-orders/integrations", PurchaseOrderIntegrationViewSet, basename="po-integrations")
+router.register(r"purchase-orders/finance-map", PurchaseOrderFinanceMapViewSet, basename="po-finance-map"
 
 urlpatterns = [
     path('', RedirectView.as_view(url='/home/', permanent=False)),
