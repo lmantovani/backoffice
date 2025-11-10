@@ -1,123 +1,158 @@
-import requests
-import logging
+# omie_api/client.py
+
 import base64
-from typing import Dict, List, Optional, Any
+import logging
+from typing import Any, Dict, List, Optional
+
+import requests
 from decouple import config
 
 logger = logging.getLogger(__name__)
 
 
 class OmieAPIException(Exception):
-    """Exceção customizada para erros da API Omie"""
+    """Exceção customizada para erros da API Omie."""
     pass
 
 
 class OmieAPIClient:
-    # assumindo que você já tem: self.app_key, self.app_secret, self.base_url e um helper _post()
+    def __init__(self):
+        self.app_key = config("OMIE_APP_KEY")
+        self.app_secret = config("OMIE_APP_SECRET")
+        self.base_url = config(
+            "OMIE_API_BASE_URL",
+            default="https://app.omie.com.br/api/v1/",
+        )
 
-    def _post(self, endpoint: str, call: str, param: list):
-        """
-        Helper padrão Omie. Ajuste se o seu já for diferente.
-        """
+        # Config RF-002 (encerramento pedido)
+        self.po_close_status = config("OMIE_PO_CLOSE_STATUS", default="Encerrado")
+        self.po_close_call = config("OMIE_PO_CLOSE_CALL", default="AlterarPedidoCompra")
+        self.po_close_endpoint = config(
+            "OMIE_PO_CLOSE_ENDPOINT",
+            default="produtos/pedidocompra/",
+        )
+
+    @classmethod
+    def from_settings(cls) -> "OmieAPIClient":
+        return cls()
+
+    # ------------ Helpers básicos ------------
+
+    def _post_raw(self, endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         url = f"{self.base_url}{endpoint}"
+        try:
+            resp = requests.post(url, json=payload, timeout=60)
+            resp.raise_for_status()
+        except requests.RequestException as exc:
+            logger.error("Erro HTTP Omie: %s", exc)
+            raise OmieAPIException(f"Erro HTTP ao chamar Omie: {exc}") from exc
+
+        data = resp.json()
+        if isinstance(data, dict) and "faultstring" in data:
+            logger.error("Erro Omie: %s", data)
+            raise OmieAPIException(data["faultstring"])
+        return data
+
+    def _call(self, endpoint: str, call: str, params: Dict[str, Any]) -> Dict[str, Any]:
         payload = {
             "call": call,
             "app_key": self.app_key,
             "app_secret": self.app_secret,
-            "param": param,
+            "param": [params],
         }
-        resp = requests.post(url, json=payload, timeout=60)
-        resp.raise_for_status()
-        data = resp.json()
-        if "faultstring" in str(data):
-            logger.error("Erro Omie: %s", data)
-        return data
+        logger.info("Omie API call=%s endpoint=%s", call, endpoint)
+        return self._post_raw(endpoint, payload)
 
-    # ---------- Pedido de Compra ----------
+    # ------------ Pedidos de Compra ------------
 
-    def incluir_pedido_compra(self, pedido: dict) -> dict:
-        return self._post(
-            "/api/v1/produtos/pedidocompra/",
-            "IncluirPedCompra",
-            [pedido],
+    def incluir_pedido_compra(self, pedido: Dict[str, Any]) -> Dict[str, Any]:
+        return self._call("produtos/pedidocompra/", "IncluirPedCompra", pedido)
+
+    def consultar_pedido_compra(self, chave: Dict[str, Any]) -> Dict[str, Any]:
+        # chave exemplo: {"nCodPed": 123} ou {"cNumero": "..."}
+        return self._call("produtos/pedidocompra/", "ConsultarPedCompra", chave)
+
+    # ------------ Recebimentos (notas de compra) ------------
+
+    def listar_recebimentos(
+        self,
+        pagina: int = 1,
+        registros_por_pagina: int = 50,
+        filtros: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        params: Dict[str, Any] = {
+            "nPagina": pagina,
+            "nRegPorPagina": registros_por_pagina,
+        }
+        if filtros:
+            params.update(filtros)
+        return self._call("produtos/recebimentonfe/", "ListarRecebimentos", params)
+
+    # ------------ Contas a Pagar ------------
+
+    def incluir_conta_pagar(self, conta: Dict[str, Any]) -> Dict[str, Any]:
+        return self._call("financas/contapagar/", "IncluirContaPagar", conta)
+
+    def consultar_conta_pagar(self, codigo_lancamento: int) -> Dict[str, Any]:
+        return self._call(
+            "financas/contapagar/",
+            "ConsultarContaPagar",
+            {"nCodTitulo": codigo_lancamento},
         )
 
-    def consultar_pedido_compra(self, chave: dict) -> dict:
-        return self._post(
-            "/api/v1/produtos/pedidocompra/",
-            "ConsultarPedCompra",
-            [chave],
-        )
+    # ------------ Anexos genéricos ------------
 
-    # ---------- Recebimentos / Notas de compra ----------
-
-    def listar_recebimentos(self, filtros: dict) -> dict:
-        """
-        Usa ListarRecebimentos para localizar nIdReceb, etc.
-        """
-        return self._post(
-            "/api/v1/produtos/recebimentonfe/",
-            "ListarRecebimentos",
-            [filtros],
-        )
-
-    # ---------- Contas a Pagar ----------
-
-    def incluir_conta_pagar(self, conta: dict) -> dict:
-        """
-        Use codigo_lancamento_integracao no payload para idempotência.
-        """
-        return self._post(
-            "/api/v1/financas/contapagar/",
-            "IncluirContaPagar",
-            [conta],
-        )
-
-    # ---------- Anexos genéricos ----------
-
-    def listar_anexos(self, c_tabela: str, n_id: int, pagina: int = 1, limite: int = 50) -> list:
-        data = {
+    def listar_anexos(
+        self,
+        c_tabela: str,
+        n_id: int,
+        pagina: int = 1,
+        limite: int = 50,
+    ) -> List[Dict[str, Any]]:
+        params = {
             "nPagina": pagina,
             "nRegPorPagina": limite,
             "cTabela": c_tabela,
             "nId": n_id,
         }
-        resp = self._post(
-            "/api/v1/geral/anexo/",
-            "ListarAnexo",
-            [data],
-        )
-        return resp.get("listaAnexos", [])
+        data = self._call("geral/anexo/", "ListarAnexo", params)
+        # doc nova usa "listaAnexos"
+        return data.get("listaAnexos", []) or data.get("anexos", [])
 
-    def obter_anexo(self, c_tabela: str, n_id: int, n_id_anexo: int = None, c_nome_arquivo: str = None) -> dict:
-        data = {
+    def obter_anexo(
+        self,
+        c_tabela: str,
+        n_id: int,
+        n_id_anexo: Optional[int] = None,
+        c_nome_arquivo: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        params: Dict[str, Any] = {
             "cTabela": c_tabela,
             "nId": n_id,
         }
         if n_id_anexo is not None:
-            data["nIdAnexo"] = n_id_anexo
+            params["nIdAnexo"] = n_id_anexo
         if c_nome_arquivo:
-            data["cNomeArquivo"] = c_nome_arquivo
+            params["cNomeArquivo"] = c_nome_arquivo
+        return self._call("geral/anexo/", "ObterAnexo", params)
 
-        resp = self._post(
-            "/api/v1/geral/anexo/",
-            "ObterAnexo",
-            [data],
-        )
-        return resp
-
-    def incluir_anexo(self, c_tabela: str, n_id: int, nome_arquivo: str, arquivo_base64: str) -> dict:
-        data = {
+    def incluir_anexo(
+        self,
+        c_tabela: str,
+        n_id: int,
+        nome_arquivo: str,
+        arquivo_base64: str,
+        descricao: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        params: Dict[str, Any] = {
             "cTabela": c_tabela,
             "nId": n_id,
             "cNomeArquivo": nome_arquivo,
             "cArquivo": arquivo_base64,
         }
-        return self._post(
-            "/api/v1/geral/anexo/",
-            "IncluirAnexo",
-            [data],
-        )
+        if descricao:
+            params["cDescricao"] = descricao
+        return self._call("geral/anexo/", "IncluirAnexo", params)
 
     def copiar_anexo(
         self,
@@ -125,12 +160,8 @@ class OmieAPIClient:
         origem_id: int,
         destino_tabela: str,
         destino_id: int,
-        anexo_info: dict,
-    ) -> dict:
-        """
-        Utilitário: dado um item de listaAnexos da origem,
-        baixa e inclui igual no destino.
-        """
+        anexo_info: Dict[str, Any],
+    ) -> Dict[str, Any]:
         n_id_anexo = anexo_info.get("nIdAnexo")
         nome_arquivo = anexo_info.get("cNomeArquivo")
 
@@ -141,15 +172,15 @@ class OmieAPIClient:
         )
 
         conteudo_b64 = detalhe.get("cArquivo")
+        link = detalhe.get("cLinkDownload")
 
-        if not conteudo_b64 and detalhe.get("cLinkDownload"):
-            # baixa do link e converte
-            r = requests.get(detalhe["cLinkDownload"], timeout=60)
-            r.raise_for_status()
-            conteudo_b64 = base64.b64encode(r.content).decode()
+        if not conteudo_b64 and link:
+            resp = requests.get(link, timeout=60)
+            resp.raise_for_status()
+            conteudo_b64 = base64.b64encode(resp.content).decode()
 
         if not conteudo_b64:
-            raise Exception("Não foi possível obter conteúdo do anexo na Omie.")
+            raise OmieAPIException("Não foi possível obter conteúdo do anexo na Omie.")
 
         return self.incluir_anexo(
             c_tabela=destino_tabela,
@@ -158,290 +189,19 @@ class OmieAPIClient:
             arquivo_base64=conteudo_b64,
         )
 
+    # ------------ RF-002: Encerramento Pedido (mantido) ------------
 
-    def __init__(self):
-        self.app_key = config('OMIE_APP_KEY')
-        self.app_secret = config('OMIE_APP_SECRET')
-        self.base_url = config('OMIE_API_BASE_URL', default='https://app.omie.com.br/api/v1/')
-        # Configurações para encerramento de Pedido de Compra
-        # Algumas contas usam cStatus="Fechado" e outras "Encerrado". Torna-se configurável por env.
-        self.po_close_status = config('OMIE_PO_CLOSE_STATUS', default='Encerrado')
-        self.po_close_call = config('OMIE_PO_CLOSE_CALL', default='AlterarPedidoCompra')
-        self.po_close_endpoint = config('OMIE_PO_CLOSE_ENDPOINT', default='produtos/pedidocompra/')
-
-    def _make_request(self, endpoint: str, call: str, params: Dict[str, Any]) -> Dict:
-        """
-        Método genérico para fazer requisições à API Omie
-
-        Args:
-            endpoint: Endpoint da API (ex: 'produtos/nfconsultar/')
-            call: Nome da chamada da API (ex: 'ListarRecebimentos')
-            params: Parâmetros específicos da chamada
-
-        Returns:
-            Dict com a resposta da API
-        """
-        url = f"{self.base_url}{endpoint}"
-
-        payload = {
-            "call": call,
-            "app_key": self.app_key,
-            "app_secret": self.app_secret,
-            "param": [params]
-        }
-
-        try:
-            logger.info(f"Chamando API Omie: {call} - Endpoint: {endpoint}")
-            response = requests.post(url, json=payload, timeout=30)
-            response.raise_for_status()
-
-            data = response.json()
-
-            # Verifica se houve erro na resposta da Omie
-            if 'faultstring' in data:
-                raise OmieAPIException(f"Erro Omie: {data['faultstring']}")
-
-            logger.info(f"Resposta recebida com sucesso: {call}")
-            return data
-
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Erro na requisição à API Omie: {str(e)}")
-            raise OmieAPIException(f"Erro na comunicação com Omie: {str(e)}")
-
-    # ===== RF-001: Métodos para Gestão de Anexos =====
-
-    def listar_anexos(self, tabela: str, n_id: int) -> List[Dict]:
-        """
-        Lista anexos de um registro específico
-
-        Args:
-            tabela: Nome da tabela (exato): 'com-recebimento' ou 'conta_a_pagar'. Outros valores podem existir em módulos específicos.
-            n_id: ID do registro
-
-        Returns:
-            Lista de anexos
-        """
-        allowed = {"conta_a_pagar", "com-recebimento"}
-        if tabela not in allowed:
-            logger.warning(
-                "Valor de cTabela possivelmente incorreto: %s. Exemplos válidos comuns: %s. Prosseguindo assim mesmo...",
-                tabela, sorted(allowed)
-            )
-        params = {
-            "cTabela": tabela,
-            "nId": n_id
-        }
-
-        response = self._make_request(
-            endpoint='geral/anexo/',
-            call='ListarAnexo',
-            params=params
-        )
-
-        return response.get('anexos', [])
-
-    def obter_anexo(self, n_id_anexo: int) -> Dict:
-        """
-        Obtém o conteúdo de um anexo específico (base64)
-
-        Args:
-            n_id_anexo: ID do anexo
-
-        Returns:
-            Dict com dados do anexo incluindo cArquivo (base64)
-        """
-        params = {
-            "nIdAnexo": n_id_anexo
-        }
-
-        response = self._make_request(
-            endpoint='geral/anexo/',
-            call='ObterAnexo',
-            params=params
-        )
-
-        return response
-
-    def incluir_anexo(self, tabela: str, n_id: int, nome_arquivo: str,
-                      arquivo_base64: str, descricao: Optional[str] = None) -> Dict:
-        """
-        Inclui um anexo em um registro
-
-        Args:
-            tabela: Nome da tabela de destino (exato): 'conta_a_pagar' ou 'com-recebimento'.
-            n_id: ID do registro de destino
-            nome_arquivo: Nome do arquivo
-            arquivo_base64: Conteúdo do arquivo em base64
-            descricao: Descrição opcional do anexo
-
-        Returns:
-            Dict com resposta da inclusão
-        """
-        allowed = {"conta_a_pagar", "com-recebimento"}
-        if tabela not in allowed:
-            logger.warning(
-                "Valor de cTabela possivelmente incorreto ao incluir anexo: %s. Exemplos válidos comuns: %s.",
-                tabela, sorted(allowed)
-            )
-        params = {
-            "cTabela": tabela,
-            "nId": n_id,
-            "cNomeArquivo": nome_arquivo,
-            "cArquivo": arquivo_base64,
-        }
-
-        if descricao:
-            params["cDescricao"] = descricao
-
-        response = self._make_request(
-            endpoint='geral/anexo/',
-            call='IncluirAnexo',
-            params=params
-        )
-
-        return response
-
-    def listar_recebimentos(self, pagina: int = 1, registros_por_pagina: int = 50,
-                            filtros: Optional[Dict] = None) -> Dict:
-        """
-        Lista recebimentos de NF-e
-
-        Args:
-            pagina: Número da página
-            registros_por_pagina: Quantidade de registros por página
-            filtros: Filtros adicionais (opcional)
-
-        Returns:
-            Dict com lista de recebimentos
-        """
-        params = {
-            "nPagina": pagina,
-            "nRegPorPagina": registros_por_pagina
-        }
-
-        if filtros:
-            params.update(filtros)
-
-        response = self._make_request(
-            endpoint='produtos/nfconsultar/',
-            call='ListarRecebimentos',
-            params=params
-        )
-
-        return response
-
-    def consultar_recebimento(self, n_id_receb: int) -> Dict:
-        """
-        Consulta um recebimento específico pelo ID
-
-        Args:
-            n_id_receb: ID do recebimento
-
-        Returns:
-            Dict com dados do recebimento
-        """
-        params = {
-            "nIdReceb": n_id_receb
-        }
-
-        response = self._make_request(
-            endpoint='produtos/nfconsultar/',
-            call='ConsultarRecebimento',
-            params=params
-        )
-
-        return response
-
-    # ===== RF-002: Métodos para Pedidos de Compra =====
-
-    def consultar_pedido_compra(self, numero_pedido: str) -> Dict:
-        """
-        Consulta um pedido de compra pelo número
-
-        Args:
-            numero_pedido: Número do pedido de compra
-
-        Returns:
-            Dict com dados do pedido
-        """
-        params = {
-            "cNumero": numero_pedido
-        }
-
-        response = self._make_request(
-            endpoint='produtos/pedidocompra/',
-            call='ConsultarPedidoCompra',
-            params=params
-        )
-
-        return response
-
-    def encerrar_pedido_compra(self, numero_pedido: str, codigo_item: Optional[str] = None) -> Dict:
-        """
-        Encerra (finaliza) um pedido de compra ou um item específico.
-        Por diferenças entre contas Omie, o campo/valor de status e até o call/endpoint
-        podem variar. Tornamos isso configurável via env/settings:
-          - OMIE_PO_CLOSE_STATUS (default: "Encerrado")
-          - OMIE_PO_CLOSE_CALL (default: "AlterarPedidoCompra")
-          - OMIE_PO_CLOSE_ENDPOINT (default: "produtos/pedidocompra/")
-
-        Args:
-            numero_pedido: Número do pedido de compra
-            codigo_item: Código do item (opcional, se quiser encerrar apenas um item)
-
-        Returns:
-            Dict com resposta do encerramento
-        """
-        status_val = (self.po_close_status or 'Encerrado').strip()
-        if status_val not in {"Encerrado", "Fechado"}:
-            logger.warning(
-                "Valor de status para encerramento não usual: %s. Esperado: 'Encerrado' ou 'Fechado' dependendo da conta.",
-                status_val,
-            )
-
-        params = {
+    def encerrar_pedido_compra(
+        self,
+        numero_pedido: str,
+        codigo_item: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        status_val = (self.po_close_status or "Encerrado").strip()
+        params: Dict[str, Any] = {
             "cNumero": numero_pedido,
             "cStatus": status_val,
         }
-
         if codigo_item:
             params["cCodItem"] = codigo_item
 
-        logger.info(
-            "Fechando pedido de compra no Omie: numero=%s, item=%s, status=%s, call=%s, endpoint=%s",
-            numero_pedido,
-            codigo_item or "<todos>",
-            status_val,
-            self.po_close_call,
-            self.po_close_endpoint,
-        )
-
-        response = self._make_request(
-            endpoint=self.po_close_endpoint,
-            call=self.po_close_call,
-            params=params,
-        )
-
-        return response
-
-    def consultar_contas_pagar(self, codigo_lancamento: int) -> Dict:
-        """
-        Consulta um lançamento de contas a pagar
-
-        Args:
-            codigo_lancamento: Código do lançamento
-
-        Returns:
-            Dict com dados do contas a pagar
-        """
-        params = {
-            "nCodTitulo": codigo_lancamento
-        }
-
-        response = self._make_request(
-            endpoint='financas/contapagar/',
-            call='ConsultarContaPagar',
-            params=params
-        )
-
-        return response
+        return self._call(self.po_close_endpoint, self.po_close_call, params)

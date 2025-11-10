@@ -1,17 +1,22 @@
-# apps/purchase_orders/views.py
-from rest_framework import viewsets, status
+import logging
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .models import PurchaseOrderClosureLog, PurchaseOrderIntegration, PurchaseOrderFinanceMap
-from .services import PurchaseOrderClosureService, PurchaseOrderRobotService
-from .tasks import encerrar_pedido_task
 
-from .serializers import (  # crie serializers simples ou ajuste
+from .models import (
+    PurchaseOrderClosureLog,
+    PurchaseOrderIntegration,
+    PurchaseOrderFinanceMap,
+)
+from .serializers import (
+    PurchaseOrderClosureLogSerializer,
     PurchaseOrderIntegrationSerializer,
     PurchaseOrderFinanceMapSerializer,
 )
-
-import logging
+from .services import (
+    FullFlowPurchaseOrderService,
+    PurchaseOrderRobotService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -87,3 +92,32 @@ class PurchaseOrderClosureViewSet(viewsets.ReadOnlyModelViewSet):
             'sucessos': len([r for r in resultados if r.status == 'success']),
             'falhas': len([r for r in resultados if r.status == 'failed'])
         })
+
+class PurchaseOrderIntegrationViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = PurchaseOrderIntegration.objects.all().order_by("-created_at")
+    serializer_class = PurchaseOrderIntegrationSerializer
+
+    @action(detail=False, methods=["post"], url_path="full-flow")
+    def full_flow(self, request):
+        service = FullFlowPurchaseOrderService()
+        pedido_data = request.data.get("pedido") or {}
+        arquivos = request.FILES.getlist("anexos")
+        po = service.criar_pedido_com_anexos(pedido_data, arquivos)
+        service.processar_pedido_para_financeiro(po)
+        serializer = self.get_serializer(po)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["post"], url_path="run-robot")
+    def run_robot(self, request):
+        service = PurchaseOrderRobotService()
+        service.processar()
+        return Response({"detail": "Robô executado."}, status=status.HTTP_200_OK)
+
+
+class PurchaseOrderFinanceMapViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = (
+        PurchaseOrderFinanceMap.objects.select_related("purchase_order")
+        .all()
+        .order_by("-created_at")
+    )
+    serializer_class = PurchaseOrderFinanceMapSerializer
