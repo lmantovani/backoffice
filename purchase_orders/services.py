@@ -1,5 +1,7 @@
 import base64
 import logging
+import requests
+from django.conf import settings
 
 from django.db import transaction
 
@@ -12,6 +14,65 @@ from .models import (
 )
 
 logger = logging.getLogger(__name__)
+
+class OmieClient:
+    BASE_URL = "https://app.omie.com.br/api/v1"
+
+    @classmethod
+    def call(cls, endpoint: str, method: str, body: dict):
+        payload = {
+            "call": method,
+            "app_key": settings.OMIE_APP_KEY,
+            "app_secret": settings.OMIE_APP_SECRET,
+            "param": [body],
+        }
+        url = f"{cls.BASE_URL}{endpoint}"
+        resp = requests.post(url, json=payload, timeout=30)
+        resp.raise_for_status()
+        return resp.json()
+
+
+class SupplierService:
+    """
+    Consulta fornecedores no Omie usando ListarClientes,
+    filtrando apenas quem é fornecedor.
+    """
+
+    @classmethod
+    def list_suppliers(cls, search: str | None = None, page: int = 1, per_page: int = 50):
+        body = {
+            "pagina": page,
+            "registros_por_pagina": per_page,
+            "apenas_importado_api": "N",
+        }
+
+        # filtro básico por nome/razão/CPFCNPJ
+        if search:
+            body["pesquisa"] = {
+                "campo": "RAZAO_SOCIAL",
+                "valor": search,
+            }
+
+        data = OmieClient.call(
+            endpoint="/geral/clientes/",
+            method="ListarClientes",
+            body=body,
+        )
+
+        results = []
+        for item in data.get("clientes_cadastro", []):
+            # ajuste essa condição conforme o que o Omie retornar no seu ambiente
+            tipo = (item.get("cTipo") or "").upper()
+            if tipo in ("F", "FORN", "FORNECEDOR", ""):
+                results.append(
+                    {
+                        "id": item.get("codigo_cliente_omie"),
+                        "nome": item.get("razao_social") or item.get("nome_fantasia"),
+                        "cnpj_cpf": item.get("cnpj_cpf"),
+                    }
+                )
+
+        return results
 
 
 class FullFlowPurchaseOrderService:

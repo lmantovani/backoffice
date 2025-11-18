@@ -1,108 +1,196 @@
 {% extends "base.html" %}
-{% block title %}Pedidos de Compra{% endblock %}
+
+{% block title %}Pedidos de Compra - BackOffice{% endblock %}
+
 {% block content %}
-<div class="py-3">
-  <h2 class="h4 mb-1">Encerramento de Pedidos de Compra</h2>
-  <p class="text-gray-600">Dispare manualmente o encerramento de um pedido de compra via API.</p>
-</div>
-<div class="row">
-  <div class="col-12 col-lg-8">
-    <div class="card bg-white shadow border-0 rounded border-light mb-4">
-      <div class="card-body p-4 p-lg-5">
-        <form id="form-encerrar" class="row g-3">
-          <div class="col-sm-6">
-            <label class="form-label" for="pedido_id">ID do Pedido</label>
-            <div class="input-group">
-              <input class="form-control" type="number" id="pedido_id" required />
-            </div>
-          </div>
-          <div class="col-sm-6">
-            <label class="form-label" for="status">Status de Encerramento</label>
-            <div class="input-group">
-              <input class="form-control" type="text" id="status" placeholder="Encerrado" />
-            </div>
-          </div>
-          <div class="col-12 d-flex align-items-center">
-            <button class="btn btn-gray-800" type="submit">Encerrar Pedido</button>
-          </div>
-        </form>
-      </div>
-    </div>
-    <div id="po-resultado" class="d-none">
-      <div class="alert" role="alert"></div>
-      <pre class="bg-light p-3 border rounded small"></pre>
+<div class="py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h2 class="h4">Pedidos de Compra</h2>
+      <p class="text-muted mb-0">Crie e acompanhe pedidos integrados ao Omie.</p>
     </div>
   </div>
-  <div class="col-12 col-lg-4">
-    <div class="card bg-white shadow border-0 rounded border-light">
-      <div class="card-body">
-        <h6 class="mb-2">Endpoints</h6>
-        <ul class="list-unstyled small text-muted mb-0">
-          <li>POST {{ api_base }}encerrar/</li>
-          <li>Base: {{ api_base }}</li>
-        </ul>
+
+  <div class="card mb-4">
+    <div class="card-header">
+      <strong>Novo Pedido de Compra</strong>
+    </div>
+    <div class="card-body">
+      <form id="purchaseOrderForm" method="post">
+        {% csrf_token %}
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">Código Integração (opcional)</label>
+            <input type="text" name="cCodIntPed" class="form-control" placeholder="PO-0001">
+          </div>
+          <div class="col-md-4">
+          <label class="form-label">Código Fornecedor (Omie)</label>
+          <input
+              type="text"
+              name="codigo_cliente_fornecedor"
+              id="supplier-input"
+              class="form-control"
+              list="suppliers-list"
+              autocomplete="off"
+              required
+          >
+          <datalist id="suppliers-list"></datalist>
+          <small class="text-muted">
+            Comece a digitar o nome, CNPJ ou código para buscar no Omie.
+          </small>
+        </div>
+
+          <div class="col-md-4">
+            <label class="form-label">Valor Total</label>
+            <input type="number" step="0.01" name="nValorTotal" class="form-control" required>
+          </div>
+        </div>
+
+        <div class="row g-3 mt-2">
+          <div class="col-md-12">
+            <label class="form-label">Observações</label>
+            <textarea name="observacao" class="form-control" rows="2"></textarea>
+          </div>
+        </div>
+
+        <div class="row g-3 mt-2">
+          <div class="col-md-12">
+            <label class="form-label">Anexos (PDF, XML, etc.)</label>
+            <input type="file" name="anexos" class="form-control" multiple>
+          </div>
+        </div>
+
+        <div class="mt-3 d-flex justify-content-end">
+          <button type="submit" class="btn btn-primary">Criar pedido e enviar para Omie</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <strong>Pedidos integrados</strong>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table mb-0" id="ordersTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Cod.Int.</th>
+              <th>nCodPed Omie</th>
+              <th>Origem</th>
+              <th>Método</th>
+              <th>Criado em</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
       </div>
     </div>
   </div>
 </div>
 {% endblock %}
+
 {% block extra_js %}
 <script>
-(function() {
-  function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-      const cookies = document.cookie.split(';');
-      for (let i = 0; i < cookies.length; i++) {
-        const cookie = cookies[i].trim();
-        if (cookie.substring(0, name.length + 1) === (name + '=')) {
-          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-          break;
-        }
+document.addEventListener("DOMContentLoaded", function() {
+  const form = document.getElementById("purchaseOrderForm");
+  const tableBody = document.querySelector("#ordersTable tbody");
+
+  // ------- Autocomplete de fornecedores (Omie) -------
+  const supplierInput = document.getElementById("supplier-input");
+  const supplierList = document.getElementById("suppliers-list");
+  let supplierTimer = null;
+
+  if (supplierInput && supplierList) {
+    supplierInput.addEventListener("input", function () {
+      const term = this.value.trim();
+
+      // só busca a partir de 3 caracteres
+      if (term.length < 3) {
+        supplierList.innerHTML = "";
+        return;
       }
-    }
-    return cookieValue;
+
+      clearTimeout(supplierTimer);
+      supplierTimer = setTimeout(() => {
+        fetch(`/api/suppliers/?search=${encodeURIComponent(term)}`)
+          .then((r) => r.json())
+          .then((data) => {
+            supplierList.innerHTML = "";
+            data.forEach((s) => {
+              const opt = document.createElement("option");
+              // value = código Omie, label = descrição bonita
+              opt.value = s.id;
+              opt.label = `${s.id} - ${s.nome}${s.cnpj_cpf ? " (" + s.cnpj_cpf + ")" : ""}`;
+              supplierList.appendChild(opt);
+            });
+          })
+          .catch((err) => {
+            console.error("Erro ao buscar fornecedores:", err);
+          });
+      }, 300); // debounce de 300ms
+    });
   }
-  const csrftoken = getCookie('csrftoken');
-  const form = document.getElementById('form-encerrar');
-  const container = document.getElementById('po-resultado');
-  const alertBox = container.querySelector('.alert');
-  const pre = container.querySelector('pre');
 
-  form.addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const pedido_id = document.getElementById('pedido_id').value;
-    const status = document.getElementById('status').value || 'Encerrado';
-
-    alertBox.className = 'alert alert-info';
-    alertBox.textContent = 'Processando...';
-    pre.textContent = '';
-    container.classList.remove('d-none');
-
-    try {
-      const resp = await fetch('{{ api_base }}encerrar/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': csrftoken
-        },
-        body: JSON.stringify({ pedido_id: pedido_id, status: status })
+  // ------- Lista pedidos integrados -------
+  fetch("/api/purchase-orders/integrations/")
+    .then(r => r.json())
+    .then(data => {
+      (data.results || []).forEach(po => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${po.id}</td>
+          <td>${po.cod_int_pedido || ""}</td>
+          <td>${po.ncodped_omie}</td>
+          <td>${po.origem}</td>
+          <td>${po.metodo_criacao}</td>
+          <td>${po.created_at || ""}</td>
+        `;
+        tableBody.appendChild(tr);
       });
-      const data = await resp.json();
-      if (resp.ok) {
-        alertBox.className = 'alert alert-success';
-        alertBox.textContent = 'Operação realizada com sucesso';
-      } else {
-        alertBox.className = 'alert alert-danger';
-        alertBox.textContent = 'Falha na operação';
+    });
+
+  // ------- Cria pedido chamando nosso endpoint full-flow -------
+  form.addEventListener("submit", async function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(form);
+
+    const pedido = {
+      cCodIntPed: formData.get("cCodIntPed") || null,
+      codigo_cliente_fornecedor: Number(formData.get("codigo_cliente_fornecedor")),
+      nValorTotal: parseFloat(formData.get("nValorTotal")),
+      observacao: formData.get("observacao") || ""
+    };
+
+    const payload = new FormData();
+    payload.append("pedido", JSON.stringify(pedido));
+
+    const files = form.querySelector('input[name="anexos"]').files;
+    for (let i = 0; i < files.length; i++) {
+      payload.append("anexos", files[i]);
+    }
+
+    const res = await fetch("/api/purchase-orders/integrations/full-flow/", {
+      method: "POST",
+      body: payload,
+      headers: {
+        "X-CSRFToken": document.querySelector('[name=csrfmiddlewaretoken]').value
       }
-      pre.textContent = JSON.stringify(data, null, 2);
-    } catch (err) {
-      alertBox.className = 'alert alert-danger';
-      alertBox.textContent = 'Erro de rede ou servidor';
-      pre.textContent = String(err);
+    });
+
+    if (res.ok) {
+      alert("Pedido criado e enviado para Omie com sucesso!");
+      window.location.reload();
+    } else {
+      const err = await res.text();
+      console.error(err);
+      alert("Erro ao criar pedido. Veja o console para detalhes.");
     }
   });
-})();
+});
 </script>
 {% endblock %}
+

@@ -1,7 +1,12 @@
 import logging
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from django.contrib.auth.decorators import login_required
+from django.utils.decorators import method_decorator
+from django.shortcuts import render
+from rest_framework.views import APIView
 
 from .models import (
     PurchaseOrderClosureLog,
@@ -17,8 +22,13 @@ from .services import (
     FullFlowPurchaseOrderService,
     PurchaseOrderRobotService,
 )
+from .services import SupplierService
 
 logger = logging.getLogger(__name__)
+
+@login_required
+def purchase_orders_page(request):
+    return render(request, "pages/purchase_orders.html")
 
 
 class PurchaseOrderClosureViewSet(viewsets.ReadOnlyModelViewSet):
@@ -121,3 +131,12 @@ class PurchaseOrderFinanceMapViewSet(viewsets.ReadOnlyModelViewSet):
         .order_by("-created_at")
     )
     serializer_class = PurchaseOrderFinanceMapSerializer
+
+class SupplierListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        search = request.query_params.get("search") or request.query_params.get("q") or ""
+        suppliers = SupplierService.list_suppliers(search=search)
+        return Response(suppliers)
+

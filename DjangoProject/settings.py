@@ -82,9 +82,9 @@ TEMPLATES = [
 WSGI_APPLICATION = 'DjangoProject.wsgi.application'
 
 # Redirects after login/logout
-LOGIN_REDIRECT_URL = 'home'
-LOGOUT_REDIRECT_URL = 'home'
-LOGIN_URL = 'login'
+LOGIN_URL = "login"              # para LoginRequiredMixin etc.
+LOGIN_REDIRECT_URL = "home"      # depois de logar, manda para /
+LOGOUT_REDIRECT_URL = "login"    # depois de logout, volta pro login
 
 
 # Database

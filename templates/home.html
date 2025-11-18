@@ -1,42 +1,153 @@
 {% extends "base.html" %}
-{% block title %}Início{% endblock %}
+{% block title %}Dashboard - BackOffice Omie{% endblock %}
+
 {% block content %}
-<div class="row">
-  <div class="col-12 col-xl-8">
-    <div class="card bg-white shadow border-0 rounded border-light mb-4">
-      <div class="card-body p-4 p-lg-5">
-        <h2 class="h4 mb-2">Bem-vindo</h2>
-        <p class="text-gray-600">Este projeto usa Django + Django REST Framework. Use os botões abaixo para navegar.</p>
-        <div class="d-flex gap-2">
-          <a class="btn btn-gray-800" href="/admin/">Abrir Admin</a>
-          <a class="btn btn-outline-secondary" href="/api/">Abrir API</a>
-          <a class="btn btn-outline-secondary" href="/attachments/">Anexos (UI)</a>
-          <a class="btn btn-outline-secondary" href="/purchase-orders/">Pedidos (UI)</a>
+<div class="py-4">
+  <!-- Cabeçalho -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h2 class="h4 mb-1">BackOffice Omie</h2>
+      <p class="text-muted mb-0">
+        Central de pedidos de compra, anexos e automações com o Omie.
+      </p>
+    </div>
+    <div class="text-end">
+      <span class="badge bg-success">Ambiente: Homologação</span>
+      {# depois você pode trocar dinamicamente para Produção/Homologação #}
+    </div>
+  </div>
+
+  <!-- Linha 1: Ações rápidas -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <a href="{% url 'purchase_orders_ui' %}" class="btn w-100 btn-primary">
+        📦 Novo Pedido de Compra
+      </a>
+    </div>
+    <div class="col-md-3">
+      <a href="{% url 'attachments_page' %}" class="btn w-100 btn-outline-primary">
+        📎 Anexos Pendentes
+      </a>
+    </div>
+    <div class="col-md-3">
+      <a href="/api/" class="btn w-100 btn-outline-secondary">
+        🧩 Ver Endpoints da API
+      </a>
+    </div>
+    <div class="col-md-3">
+      <a href="/admin/" class="btn w-100 btn-outline-secondary">
+        ⚙️ Administração do Sistema
+      </a>
+    </div>
+  </div>
+
+  <!-- Linha 2: Indicadores principais -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm">
+        <div class="card-body">
+          <div class="small text-muted mb-1">Status Omie</div>
+          <div class="d-flex align-items-center">
+            <span class="badge bg-success me-2">Online</span>
+            <small class="text-muted">Último teste: agora</small>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm">
+        <div class="card-body">
+          <div class="small text-muted mb-1">Pedidos aguardando envio</div>
+          <h4 class="mb-0">0</h4>
+          <small class="text-muted">criados no BackOffice e ainda não integrados</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm">
+        <div class="card-body">
+          <div class="small text-muted mb-1">Anexos pendentes</div>
+          <h4 class="mb-0">0</h4>
+          <small class="text-muted">requisições com anexo não replicado</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm">
+        <div class="card-body">
+          <div class="small text-muted mb-1">Erros do robô</div>
+          <h4 class="mb-0 text-success">0</h4>
+          <small class="text-muted">nas últimas 24 horas</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Linha 3: Logs e resumo -->
+  <div class="row g-3">
+    <!-- Últimas ações do robô -->
+    <div class="col-lg-7">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-header bg-white border-0 pb-0">
+          <h6 class="mb-1">Últimas ações automáticas</h6>
+          <small class="text-muted">
+            Registro do robô de replicação de anexos e criação de financeiro.
+          </small>
+        </div>
+        <div class="card-body">
+          <table class="table table-sm mb-0">
+            <thead>
+              <tr>
+                <th>Data/Hora</th>
+                <th>Ação</th>
+                <th>Referência</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="4" class="text-muted small">
+                  Sem registros ainda. As ações do robô aparecerão aqui.
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
 
-    <div class="card bg-white shadow border-0 rounded border-light mb-4">
-      <div class="card-body p-4 p-lg-5">
-        <h3 class="h5 mb-3">Funcionalidades</h3>
-        <ul class="mb-0">
-          <li><a href="/api/attachments/">Transferência de Anexos (API)</a></li>
-          <li><a href="/api/purchase-orders/">Encerramento de Pedidos (API)</a></li>
-        </ul>
+    <!-- Atalhos / help contextual -->
+    <div class="col-lg-5">
+      <div class="card border-0 shadow-sm mb-3">
+        <div class="card-header bg-white border-0 pb-0">
+          <h6 class="mb-1">Como funciona o fluxo</h6>
+        </div>
+        <div class="card-body small">
+          <ol class="mb-2">
+            <li>Você cria o pedido de compra pelo BackOffice.</li>
+            <li>O sistema envia o pedido para o Omie.</li>
+            <li>Ao encerrar o pedido, o robô cria o financeiro e replica os anexos.</li>
+          </ol>
+          <p class="mb-0 text-muted">
+            Todos os passos ficam registrados no log acima para auditoria.
+          </p>
+        </div>
+      </div>
+
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white border-0 pb-0">
+          <h6 class="mb-1">Configurações rápidas</h6>
+        </div>
+        <div class="card-body small">
+          <ul class="mb-0">
+            <li>Cadastre as chaves da API Omie no <a href="/admin/">Admin</a>.</li>
+            <li>Defina regras do robô (intervalo, filtros) na área de configurações.</li>
+            <li>Acompanhe erros e reprocessamentos pelo log de automação.</li>
+          </ul>
+        </div>
       </div>
     </div>
   </div>
-  <div class="col-12 col-xl-4">
-    <div class="card bg-white shadow border-0 rounded border-light mb-4">
-      <div class="card-body p-4 p-lg-5">
-        <h3 class="h5 mb-3">Primeiros passos</h3>
-        <ol class="mb-0">
-          <li>Executar migrações: <code>python manage.py migrate</code></li>
-          <li>Criar superusuário: <code>python manage.py createsuperuser</code></li>
-          <li>Fazer login em <code>/accounts/login/</code> e usar as funcionalidades.</li>
-        </ol>
-      </div>
-    </div>
-  </div>
+
 </div>
 {% endblock %}

@@ -12,31 +12,43 @@
            data-bs-target="#sidebarMenu" aria-controls="sidebarMenu" aria-expanded="true" aria-label="Toggle navigation"></a>
       </div>
     </div>
+
     <ul class="nav flex-column pt-3 pt-md-0">
+      <!-- Dashboard -->
       <li class="nav-item">
-        <a href="/home/" class="nav-link d-flex align-items-center">
+        <a href="{% url 'home' %}" class="nav-link d-flex align-items-center">
           <span class="sidebar-icon">🏠</span>
           <span class="mt-1 ms-2 sidebar-text">Dashboard</span>
         </a>
       </li>
-      <li class="nav-item ">
-        <a href="/attachments/" class="nav-link d-flex align-items-center{% if request.resolver_match.url_name == 'attachments_page' %} active{% endif %}">
+
+      <!-- Anexos (aponta pra view/redirect que você criou) -->
+      <li class="nav-item">
+        <a href="{% url 'attachments_page' %}"
+           class="nav-link d-flex align-items-center{% if request.resolver_match.url_name == 'attachments_page' %} active{% endif %}">
           <span class="sidebar-icon">📎</span>
           <span class="mt-1 ms-2 sidebar-text">Anexos</span>
         </a>
       </li>
-      <li class="nav-item ">
-        <a href="/purchase-orders/" class="nav-link d-flex align-items-center{% if request.resolver_match.url_name == 'purchase_orders_page' %} active{% endif %}">
+
+      <!-- Pedidos de Compra (UI) -->
+      <li class="nav-item">
+        <a href="{% url 'purchase_orders_ui' %}"
+           class="nav-link d-flex align-items-center{% if request.resolver_match.url_name == 'purchase_orders_ui' %} active{% endif %}">
           <span class="sidebar-icon">📦</span>
           <span class="mt-1 ms-2 sidebar-text">Pedidos de Compra</span>
         </a>
       </li>
+
+      <!-- Admin Django -->
       <li class="nav-item">
         <a href="/admin/" class="nav-link d-flex align-items-center">
           <span class="sidebar-icon">⚙️</span>
           <span class="mt-1 ms-2 sidebar-text">Admin</span>
         </a>
       </li>
+
+      <!-- API DRF -->
       <li class="nav-item">
         <a href="/api/" class="nav-link d-flex align-items-center">
           <span class="sidebar-icon">🧩</span>
@@ -56,14 +68,15 @@
                 data-bs-target="#sidebarMenu" aria-controls="sidebarMenu" aria-expanded="false" aria-label="Toggle navigation">
           <span class="navbar-toggler-icon"></span>
         </button>
-        <a class="navbar-brand ms-2" href="/home/">BackOffice</a>
+        <a class="navbar-brand ms-2" href="{% url 'home' %}">BackOffice</a>
       </div>
+
       <div class="navbar-nav align-items-center">
         {% if user.is_authenticated %}
           <span class="text-white-50 small me-2 d-none d-sm-inline">{{ user.get_username }}</span>
-          <a class="btn btn-outline-light btn-sm" href="/accounts/logout/">Sair</a>
+          <a class="btn btn-outline-light btn-sm" href="{% url 'logout' %}">Sair</a>
         {% else %}
-          <a class="btn btn-primary btn-sm" href="/accounts/login/?next={{ request.path }}">Entrar</a>
+          <a class="btn btn-primary btn-sm" href="{% url 'login' %}?next={{ request.path }}">Entrar</a>
         {% endif %}
       </div>
     </div>
