@@ -4,7 +4,8 @@ from django.shortcuts import redirect, render
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.decorators import login_required
 from rest_framework.routers import DefaultRouter
-from purchase_orders.views import SupplierListView
+from purchase_orders.views import SupplierListView, CategoryListView, BuyerListView, ProductListView
+from purchase_orders.views import listar_anexos_pedido
 
 from attachments.views import AttachmentTransferViewSet
 from purchase_orders.views import (
@@ -41,12 +42,10 @@ def home_redirect(request):
     return redirect("home")
 
 
-def attachments_redirect(request):
-    # se alguém bater em /attachments/, você pode:
-    # - mandar para a API, ou
-    # - futuramente renderizar uma página HTML
-    # por enquanto, vamos só mandar pro endpoint da API pra não dar 404
-    return redirect("/api/attachments/")
+@login_required
+def attachments_page_view(request):
+    # Renderiza a tela de Anexos (forms que consomem os endpoints existentes da API)
+    return render(request, "pages/attachments.html")
 
 
 def purchase_orders_redirect(request):
@@ -90,11 +89,15 @@ urlpatterns = [
         name="password_reset_complete",
     ),
 
-    # rotas "amigáveis" para não dar 404 nos links existentes
-    path("attachments/", attachments_redirect, name="attachments_page"),
+    # Tela de Anexos (UI)
+    path("attachments/", attachments_page_view, name="attachments_page"),
 
     # admin e API
     path("admin/", admin.site.urls),
     path("api/", include(router.urls)),
+    path("api/purchase-orders/<int:pk>/attachments/", listar_anexos_pedido, name="po_attachments"),
     path("api/suppliers/", SupplierListView.as_view(), name="suppliers-list"),
+    path("api/categories/", CategoryListView.as_view(), name="categories-list"),
+    path("api/buyers/", BuyerListView.as_view(), name="buyers-list"),
+    path("api/products/", ProductListView.as_view(), name="products-list"),
 ]

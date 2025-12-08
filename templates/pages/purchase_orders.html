@@ -3,6 +3,11 @@
 {% block title %}Pedidos de Compra - BackOffice{% endblock %}
 
 {% block content %}
+<style>
+  /* Local styles for purchase orders page */
+  .input-qty { min-width: 110px; max-width: 180px; }
+  .item-total { text-align: right; font-weight: 600; padding-right: .5rem; }
+</style>
 <div class="py-4">
   <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
@@ -47,6 +52,38 @@
         </div>
 
         <div class="row g-3 mt-2">
+          <div class="col-md-4">
+            <label class="form-label">Data Emissão</label>
+            <input type="date" name="dDtEmissao" class="form-control" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Previsão de Entrega</label>
+            <input type="date" name="dDtPrevisao" class="form-control" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Qtde Parcelas</label>
+            <input type="number" name="nQtdeParcelas" class="form-control" min="1" value="1" required>
+          </div>
+        </div>
+
+        <div class="row g-3 mt-2">
+          <div class="col-md-4">
+            <label class="form-label">Categoria (código Omie)</label>
+            <input type="text" name="codigo_categoria" class="form-control" list="categories-list" autocomplete="off">
+            <datalist id="categories-list"></datalist>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Comprador</label>
+            <input type="text" name="cCodComprador" class="form-control" list="buyers-list" autocomplete="off">
+            <datalist id="buyers-list"></datalist>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Frete</label>
+            <input type="number" step="0.01" name="nValorFrete" class="form-control" value="0">
+          </div>
+        </div>
+
+        <div class="row g-3 mt-2">
           <div class="col-md-12">
             <label class="form-label">Observações</label>
             <textarea name="observacao" class="form-control" rows="2"></textarea>
@@ -58,6 +95,67 @@
             <label class="form-label">Anexos (PDF, XML, etc.)</label>
             <input type="file" name="anexos" class="form-control" multiple>
           </div>
+        </div>
+
+        <hr />
+        <div class="d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Itens</h5>
+          <button type="button" class="btn btn-sm btn-secondary" id="openProductModal">Buscar produtos</button>
+        </div>
+        <div class="row g-3 align-items-end mt-2" id="itemForm">
+          <div class="col-md-2">
+            <label class="form-label">Código Produto</label>
+            <input type="text" name="item_codigo" id="itemCodigoInput" class="form-control" autocomplete="off">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Descrição</label>
+            <input type="text" name="item_descricao" class="form-control">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Quantidade</label>
+            <input type="number" step="0.001" name="item_quantidade" class="form-control" value="1">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Preço Unitário</label>
+            <input type="number" step="0.01" name="item_preco" class="form-control">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Unidade</label>
+            <input type="text" name="item_unidade" class="form-control" value="UN">
+          </div>
+        </div>
+
+        <div class="row g-3 mt-2">
+          <div class="col-md-3">
+            <label class="form-label">Desconto (%)</label>
+            <input type="number" step="0.01" name="item_desconto" class="form-control" value="0">
+          </div>
+          <div class="col-md-3">
+            <button type="button" class="btn btn-outline-primary mt-4" id="addItemBtn">Adicionar item</button>
+          </div>
+        </div>
+
+        <div class="table-responsive mt-3">
+          <table class="table table-sm" id="itemsTable">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Código</th>
+                <th>Descrição</th>
+                <th>Qtd</th>
+                <th>Valor Unit.</th>
+                <th>Desconto (%)</th>
+                <th>Total</th>
+                <th>Unidade</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div class="mt-2 d-flex justify-content-end align-items-center">
+          <h5 class="me-3 mb-0">Total do Pedido: <span id="itemsTotal">R$ 0,00</span></h5>
         </div>
 
         <div class="mt-3 d-flex justify-content-end">
@@ -90,6 +188,43 @@
     </div>
   </div>
 </div>
+
+<div class="modal fade" id="productSearchModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Buscar produtos Omie</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3 d-flex gap-2">
+          <input type="text" class="form-control" id="productModalSearch" placeholder="Buscar por código, descrição ou NCM">
+          <button class="btn btn-primary" id="productModalSearchBtn">Buscar</button>
+        </div>
+        <div class="alert alert-danger d-none" id="productModalAlert"></div>
+        <div class="table-responsive">
+          <table class="table table-sm" id="productModalTable">
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Descrição</th>
+                <th>Unidade</th>
+                <th>Valor Unit.</th>
+                <th>NCM</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer justify-content-between">
+        <div id="productModalPagination" class="d-flex gap-2"></div>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -101,38 +236,99 @@ document.addEventListener("DOMContentLoaded", function() {
   // ------- Autocomplete de fornecedores (Omie) -------
   const supplierInput = document.getElementById("supplier-input");
   const supplierList = document.getElementById("suppliers-list");
-  let supplierTimer = null;
+  const categoriesList = document.getElementById("categories-list");
+  const buyersList = document.getElementById("buyers-list");
+  const productCodeInput = document.getElementById("itemCodigoInput");
+  const itemsTableBody = document.querySelector("#itemsTable tbody");
+  const addItemBtn = document.getElementById("addItemBtn");
+  const itemForm = document.getElementById("itemForm");
+  const quantidadeInput = document.querySelector("input[name='item_quantidade']");
+  const descontoInput = document.querySelector("input[name='item_desconto']");
+  const precoInput = document.querySelector("input[name='item_preco']");
+  const descricaoInput = document.querySelector("input[name='item_descricao']");
+  const unidadeInput = document.querySelector("input[name='item_unidade']");
 
-  if (supplierInput && supplierList) {
-    supplierInput.addEventListener("input", function () {
-      const term = this.value.trim();
+  const currentItems = [];
+  const productCache = new Map();
+  const STORAGE_KEY = 'purchase_order_items_v1';
 
-      // só busca a partir de 3 caracteres
-      if (term.length < 3) {
-        supplierList.innerHTML = "";
+  const saveItemsToStorage = () => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(currentItems));
+    } catch (e) {
+      console.warn('Não foi possível salvar itens no localStorage:', e);
+    }
+  };
+
+  const loadItemsFromStorage = () => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      // normalize values (ensure numbers)
+      parsed.forEach((it) => {
+        it.nQtdeItem = Number(it.nQtdeItem || 0);
+        it.nValUnitario = Number(it.nValUnitario || 0);
+        it.nPercentualDesconto = Number(it.nPercentualDesconto || 0);
+        it.nValTotal = Number(it.nValTotal || 0);
+        currentItems.push(it);
+      });
+    } catch (e) {
+      console.warn('Não foi possível carregar itens do localStorage:', e);
+    }
+  };
+
+  const clearItemsStorage = () => {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
+  };
+
+  const debounceFetch = (fn) => {
+    let timer;
+    return function(value) {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(value), 300);
+    };
+  };
+
+  const attachAutocomplete = (input, listElement, endpoint, formatter) => {
+    if (!input || !listElement) return;
+    const fetcher = debounceFetch((term) => {
+      if (term.trim().length < 1) {
+        listElement.innerHTML = "";
         return;
       }
-
-      clearTimeout(supplierTimer);
-      supplierTimer = setTimeout(() => {
-        fetch(`/api/suppliers/?search=${encodeURIComponent(term)}`)
-          .then((r) => r.json())
-          .then((data) => {
-            supplierList.innerHTML = "";
-            data.forEach((s) => {
-              const opt = document.createElement("option");
-              // value = código Omie, label = descrição bonita
-              opt.value = s.id;
-              opt.label = `${s.id} - ${s.nome}${s.cnpj_cpf ? " (" + s.cnpj_cpf + ")" : ""}`;
-              supplierList.appendChild(opt);
-            });
-          })
-          .catch((err) => {
-            console.error("Erro ao buscar fornecedores:", err);
+      fetch(`${endpoint}?search=${encodeURIComponent(term)}`)
+        .then((r) => r.json())
+        .then((data) => {
+          listElement.innerHTML = "";
+          data.forEach((entry) => {
+            const opt = document.createElement("option");
+            const { value, label } = formatter(entry);
+            opt.value = value;
+            opt.textContent = label;
+            listElement.appendChild(opt);
           });
-      }, 300); // debounce de 300ms
+        })
+        .catch((err) => console.error(`Erro ao buscar ${endpoint}:`, err));
     });
-  }
+    input.addEventListener("input", (evt) => fetcher(evt.target.value));
+  };
+
+  attachAutocomplete(supplierInput, supplierList, "/api/suppliers/", (s) => ({
+    value: s.id != null ? String(s.id) : "",
+    label: `${s.id} - ${s.nome || "Sem nome"}${s.cnpj_cpf ? ` (${s.cnpj_cpf})` : ""}`
+  }));
+
+  attachAutocomplete(document.querySelector("input[name='codigo_categoria']"), categoriesList, "/api/categories/", (c) => ({
+    value: c.codigo || "",
+    label: `${c.codigo} - ${c.descricao || "Sem descrição"}`
+  }));
+
+  attachAutocomplete(document.querySelector("input[name='cCodComprador']"), buyersList, "/api/buyers/", (b) => ({
+    value: b.codigo || "",
+    label: `${b.codigo} - ${b.nome || "Sem nome"}`
+  }));
 
   // ------- Lista pedidos integrados -------
   fetch("/api/purchase-orders/integrations/")
@@ -159,11 +355,39 @@ document.addEventListener("DOMContentLoaded", function() {
     const formData = new FormData(form);
 
     const pedido = {
-      cCodIntPed: formData.get("cCodIntPed") || null,
-      codigo_cliente_fornecedor: Number(formData.get("codigo_cliente_fornecedor")),
-      nValorTotal: parseFloat(formData.get("nValorTotal")),
-      observacao: formData.get("observacao") || ""
+      cabecalho: {
+        cCodIntPed: formData.get("cCodIntPed") || null,
+        codigo_cliente_fornecedor: Number(formData.get("codigo_cliente_fornecedor")),
+        nValorTotal: parseFloat(formData.get("nValorTotal")),
+        observacao: formData.get("observacao") || "",
+        dDtEmissao: formData.get("dDtEmissao"),
+        dDtPrevisao: formData.get("dDtPrevisao"),
+        nQtdeParcelas: Number(formData.get("nQtdeParcelas")),
+        codigo_categoria: formData.get("codigo_categoria") || null,
+        cCodComprador: formData.get("cCodComprador") || null,
+        nValorFrete: parseFloat(formData.get("nValorFrete") || "0"),
+      },
+      det: currentItems.map((item, index) => ({
+        nItem: index + 1,
+        codigo_produto: item.codigo_produto,
+        descricao: item.descricao,
+        nQtdeItem: item.nQtdeItem,
+        nValUnitario: item.nValUnitario,
+        nValTotal: item.nQtdeItem * item.nValUnitario,
+        unidade: item.unidade,
+        nPercentualDesconto: item.nPercentualDesconto,
+      })),
+      parcelas: Array.from({ length: Number(formData.get("nQtdeParcelas")) }, (_, idx) => ({
+        nParcela: idx + 1,
+        dDataVencimento: formData.get("dDtPrevisao"),
+        nValorParcela: parseFloat(formData.get("nValorTotal")) / Number(formData.get("nQtdeParcelas")),
+      })),
     };
+
+    if (!currentItems.length) {
+      alert("Adicione ao menos um item antes de enviar o pedido.");
+      return;
+    }
 
     const payload = new FormData();
     payload.append("pedido", JSON.stringify(pedido));
@@ -183,14 +407,355 @@ document.addEventListener("DOMContentLoaded", function() {
 
     if (res.ok) {
       alert("Pedido criado e enviado para Omie com sucesso!");
+      // limpar itens salvos localmente para evitar reuso após envio bem-sucedido
+      try { clearItemsStorage(); } catch (e) { /* ignore */ }
       window.location.reload();
     } else {
-      const err = await res.text();
-      console.error(err);
-      alert("Erro ao criar pedido. Veja o console para detalhes.");
+      const errText = await res.text();
+      let message = "Erro ao criar pedido. Veja o console para detalhes.";
+      try {
+        const errJson = JSON.parse(errText);
+        if (errJson.detail) {
+          message = errJson.detail;
+        }
+      } catch (_) {
+        console.error("Resposta de erro não-JSON:", errText);
+      }
+      console.error("Falha ao criar pedido:", errText);
+      alert(message);
     }
   });
+
+  // ------- Renderização e manipulação de itens do pedido -------
+  const formatCurrency = (v) => {
+    try {
+      return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v || 0));
+    } catch (e) {
+      return `R$ ${Number(v || 0).toFixed(2)}`;
+    }
+  };
+
+  const computeTotals = () => {
+    let total = 0;
+    currentItems.forEach((it) => {
+      const q = Number(it.nQtdeItem || 0);
+      const p = Number(it.nValUnitario || 0);
+      const d = Number(it.nPercentualDesconto || 0);
+      const lineTotal = q * p * (1 - d / 100);
+      it.nValTotal = parseFloat(lineTotal.toFixed(2));
+      total += it.nValTotal;
+    });
+    const totalEl = document.getElementById('itemsTotal');
+    if (totalEl) totalEl.textContent = formatCurrency(total);
+    // sync back to the form's nValorTotal field (option C)
+    const nValorTotalInput = form.querySelector("input[name='nValorTotal']");
+    if (nValorTotalInput) nValorTotalInput.value = Number(total.toFixed(2));
+    return total;
+  };
+
+  const renderItems = () => {
+    itemsTableBody.innerHTML = "";
+    currentItems.forEach((item, i) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${i + 1}</td>
+        <td>${item.codigo_produto || ''}</td>
+        <td>${item.descricao || ''}</td>
+        <td>
+          <input type="number" step="0.001" class="form-control form-control-sm item-field input-qty" data-index="${i}" data-field="nQtdeItem" value="${item.nQtdeItem != null ? item.nQtdeItem : ''}">
+        </td>
+        <td>
+          <input type="number" step="0.01" class="form-control form-control-sm item-field" data-index="${i}" data-field="nValUnitario" value="${item.nValUnitario != null ? item.nValUnitario : ''}">
+        </td>
+        <td>
+          <input type="number" step="0.01" class="form-control form-control-sm item-field" data-index="${i}" data-field="nPercentualDesconto" value="${item.nPercentualDesconto != null ? item.nPercentualDesconto : 0}">
+        </td>
+        <td class="item-total">${formatCurrency(item.nValTotal || 0)}</td>
+        <td>${item.unidade || ''}</td>
+        <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger" data-index="${i}">Remover</button></td>
+      `;
+      itemsTableBody.appendChild(tr);
+    });
+    computeTotals();
+    saveItemsToStorage();
+  };
+
+  // Listener para adicionar item (opção A: merge se já existir)
+  addItemBtn.addEventListener("click", (evt) => {
+    evt.preventDefault();
+    const codigo = (productCodeInput.value || '').trim();
+    const descricao = (descricaoInput.value || '').trim();
+    const quantidadeRaw = quantidadeInput.value;
+    const precoRaw = precoInput.value;
+    const unidade = (unidadeInput.value || '').trim();
+    const descontoRaw = descontoInput.value;
+
+    const nQtdeItem = quantidadeRaw === '' ? 0 : parseFloat(quantidadeRaw);
+    const nValUnitario = precoRaw === '' ? 0 : parseFloat(precoRaw);
+    const nPercentualDesconto = descontoRaw === '' ? 0 : parseFloat(descontoRaw);
+
+    if (!codigo) {
+      alert('Informe o código do produto antes de adicionar.');
+      productCodeInput.focus();
+      return;
+    }
+    if (!descricao) {
+      alert('Informe a descrição do item.');
+      descricaoInput.focus();
+      return;
+    }
+    if (!nQtdeItem || nQtdeItem <= 0) {
+      alert('Quantidade deve ser maior que zero.');
+      quantidadeInput.focus();
+      return;
+    }
+    if (nValUnitario < 0) {
+      alert('Preço unitário inválido.');
+      precoInput.focus();
+      return;
+    }
+
+    // merge if same codigo_produto exists (Option A)
+    const existingIndex = currentItems.findIndex(ci => String(ci.codigo_produto) === String(codigo));
+    if (existingIndex >= 0) {
+      const existing = currentItems[existingIndex];
+      // sum quantities, update price and discount to the newly provided values
+      existing.nQtdeItem = Number(existing.nQtdeItem || 0) + nQtdeItem;
+      existing.nValUnitario = nValUnitario;
+      existing.nPercentualDesconto = nPercentualDesconto;
+      existing.nValTotal = parseFloat((existing.nQtdeItem * existing.nValUnitario * (1 - existing.nPercentualDesconto / 100)).toFixed(2));
+    } else {
+      const item = {
+        codigo_produto: codigo,
+        descricao: descricao,
+        nQtdeItem: nQtdeItem,
+        nValUnitario: nValUnitario,
+        nValTotal: parseFloat((nQtdeItem * nValUnitario * (1 - nPercentualDesconto / 100)).toFixed(2)),
+        unidade: unidade || 'UN',
+        nPercentualDesconto: nPercentualDesconto || 0,
+      };
+      currentItems.push(item);
+    }
+
+    renderItems();
+
+    // manter cache e foco para adicionar novo item rapidamente
+    productCodeInput.value = '';
+    descricaoInput.value = '';
+    quantidadeInput.value = '1';
+    precoInput.value = '';
+    unidadeInput.value = 'UN';
+    descontoInput.value = '0';
+    productCodeInput.focus();
+  });
+
+  // Event delegation para edição inline (Option B) e remoção já existente
+  itemsTableBody.addEventListener('input', (evt) => {
+    const target = evt.target;
+    if (target && target.classList.contains('item-field')) {
+      const idx = Number(target.dataset.index);
+      const field = target.dataset.field;
+      if (!Number.isFinite(idx) || idx < 0 || idx >= currentItems.length) return;
+      let val;
+      if (field === 'nQtdeItem' || field === 'nValUnitario' || field === 'nPercentualDesconto') {
+        val = parseFloat(target.value) || 0;
+      } else {
+        val = target.value;
+      }
+      currentItems[idx][field] = val;
+      // recompute totals for this item
+      const it = currentItems[idx];
+      it.nValTotal = parseFloat(((Number(it.nQtdeItem || 0) * Number(it.nValUnitario || 0)) * (1 - Number(it.nPercentualDesconto || 0) / 100)).toFixed(2));
+      computeTotals();
+    }
+  });
+
+  itemsTableBody.addEventListener('click', (evt) => {
+    if (evt.target.matches("button[data-index]")) {
+      const idx = Number(evt.target.dataset.index);
+      currentItems.splice(idx, 1);
+      renderItems();
+    }
+  });
+
+  // garantir que antes do submit os valores estejam sincronizados (Option C)
+  form.addEventListener('submit', function (e) {
+    // compute totals and set nValorTotal again (in case user changed items manually)
+    computeTotals();
+    // allow form submit handler above to proceed (it prevents default and posts via fetch)
+  });
+
+  // ------- Lógica do modal de busca de produtos -------
+  const productSearchModal = new bootstrap.Modal(document.getElementById('productSearchModal'));
+  const productModalSearchBtn = document.getElementById("productModalSearchBtn");
+  const productModalSearch = document.getElementById("productModalSearch");
+  const productModalTableBody = document.querySelector("#productModalTable tbody");
+  const productModalAlert = document.getElementById("productModalAlert");
+  const productModalPagination = document.getElementById("productModalPagination");
+  const productState = { page: 1, perPage: 20, search: "" };
+
+  const setItemFieldsFromProduct = (produto) => {
+    if (!produto) return;
+    productCodeInput.value = produto.codigo_produto || "";
+    descricaoInput.value = produto.descricao || "";
+    unidadeInput.value = produto.unidade || "";
+    if (produto.valor_unitario != null) {
+      precoInput.value = produto.valor_unitario;
+    }
+    if (!quantidadeInput.value || Number(quantidadeInput.value) <= 0) {
+      quantidadeInput.value = 1;
+    }
+    descontoInput.focus();
+  };
+
+  const renderPagination = (data) => {
+    productModalPagination.innerHTML = "";
+    const createBtn = (label, targetPage, disabled) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn btn-sm btn-outline-secondary";
+      btn.textContent = label;
+      btn.disabled = disabled;
+      if (!disabled) {
+        btn.dataset.page = targetPage;
+      }
+      return btn;
+    };
+    const prevBtn = createBtn("Anterior", Math.max(1, data.page - 1), !data.has_previous);
+    const nextBtn = createBtn("Próxima", data.page + 1, !data.has_next);
+    const info = document.createElement("span");
+    info.className = "align-self-center text-muted";
+    info.textContent = `Página ${data.page} de ${data.total_pages || data.page}`;
+    productModalPagination.append(prevBtn, info, nextBtn);
+  };
+
+  const fetchProducts = (searchTerm = productState.search, page = 1) => {
+    productModalAlert.classList.add("d-none");
+    productState.search = searchTerm;
+    productState.page = page;
+    const params = new URLSearchParams({
+      search: searchTerm,
+      page: page,
+      per_page: productState.perPage,
+    });
+    fetch(`/api/products/?${params.toString()}`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data) => {
+        productModalTableBody.innerHTML = "";
+        (data.results || []).forEach((prod) => {
+          productCache.set(String(prod.codigo_produto), prod);
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${prod.codigo_produto}</td>
+            <td>${prod.descricao || ""}</td>
+            <td>${prod.unidade || ""}</td>
+            <td>${prod.valor_unitario != null ? prod.valor_unitario : "-"}</td>
+            <td>${prod.ncm || ""}</td>
+            <td class="text-end">
+              <button class="btn btn-sm btn-primary select-product-btn" data-codigo="${prod.codigo_produto}">
+                Selecionar
+              </button>
+            </td>
+          `;
+          productModalTableBody.appendChild(tr);
+        });
+        renderPagination(data);
+      })
+      .catch((err) => {
+        console.error("Erro ao buscar produtos:", err);
+        productModalAlert.classList.remove("d-none");
+        productModalAlert.textContent = "Erro ao buscar produtos. Tente novamente mais tarde.";
+        productModalTableBody.innerHTML = "";
+        productModalPagination.innerHTML = "";
+      });
+  };
+
+  const ensureProductLoaded = (codigo) => {
+    if (!codigo) return;
+    const cached = productCache.get(String(codigo));
+    if (cached) {
+      setItemFieldsFromProduct(cached);
+      return;
+    }
+    const params = new URLSearchParams({ search: codigo, per_page: 1, page: 1 });
+    fetch(`/api/products/?${params.toString()}`)
+      .then((r) => r.json())
+      .then((data) => {
+        const produto = (data.results || []).find((p) => String(p.codigo_produto) === String(codigo));
+        if (produto) {
+          productCache.set(String(produto.codigo_produto), produto);
+          setItemFieldsFromProduct(produto);
+        }
+      })
+      .catch((err) => console.error("Não foi possível carregar o produto:", err));
+  };
+
+  productModalSearchBtn.addEventListener("click", () => {
+    const searchTerm = productModalSearch.value.trim();
+    fetchProducts(searchTerm, 1);
+  });
+
+  productModalSearch.addEventListener("keyup", (evt) => {
+    if (evt.key === "Enter") {
+      evt.preventDefault();
+      productModalSearchBtn.click();
+    }
+  });
+
+  productModalPagination.addEventListener("click", (evt) => {
+    if (evt.target.matches("button[data-page]")) {
+      const nextPage = Number(evt.target.dataset.page);
+      fetchProducts(productState.search, nextPage);
+    }
+  });
+
+  document.getElementById("openProductModal").addEventListener("click", () => {
+    productModalSearch.value = "";
+    productModalAlert.classList.add("d-none");
+    productModalTableBody.innerHTML = "";
+    productModalPagination.innerHTML = "";
+    productSearchModal.show();
+    fetchProducts("", 1);
+  });
+
+  document.getElementById("productSearchModal").addEventListener("hidden.bs.modal", () => {
+    productModalSearch.value = "";
+    productModalTableBody.innerHTML = "";
+    productModalPagination.innerHTML = "";
+    productModalAlert.classList.add("d-none");
+  });
+
+  const handleProductCodeInput = () => {
+    const codigo = productCodeInput.value.trim();
+    if (!codigo) return;
+    const cached = productCache.get(codigo);
+    if (cached) {
+      setItemFieldsFromProduct(cached);
+    } else {
+      ensureProductLoaded(codigo);
+    }
+  };
+
+  productCodeInput.addEventListener("blur", handleProductCodeInput);
+  productCodeInput.addEventListener("change", handleProductCodeInput);
+
+  document.addEventListener("click", (evt) => {
+    if (evt.target.matches(".select-product-btn")) {
+      const btn = evt.target;
+      const codigo = btn.dataset.codigo;
+      const produto = productCache.get(codigo);
+      setItemFieldsFromProduct(produto || { codigo_produto: codigo });
+      productSearchModal.hide();
+      quantidadeInput.focus();
+    }
+  });
+
+  // ------- Carregar itens do localStorage ao iniciar -------
+  loadItemsFromStorage();
+  renderItems();
 });
 </script>
 {% endblock %}
-

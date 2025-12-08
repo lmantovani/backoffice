@@ -78,6 +78,24 @@ Principais chaves no arquivo .env (exemplo):
 - OMIE_PO_CLOSE_STATUS (p.ex. Encerrado ou Fechado), OMIE_PO_CLOSE_CALL, OMIE_PO_CLOSE_ENDPOINT
 - DATABASE_URL (PostgreSQL) – se ausente ou vazio, o projeto usa SQLite (db.sqlite3)
 - CELERY_BROKER_URL, CELERY_RESULT_BACKEND (quando usar Celery)
+- Celery – controle de concorrência/estouro (opcional):
+  - CELERY_WORKER_PREFETCH_MULTIPLIER (padrão 1) – evita rajadas de tasks sendo pré‑lidas.
+  - CELERY_ACKS_LATE (padrão True) – melhor fairness em tasks longas.
+  - RATE_LIMIT_MONITOR_TASK (padrão "6/m") – rate limit da task monitorar_pedido_e_processar.
+  - RATE_LIMIT_ROBO_TASK (padrão "2/m") – rate limit do robô de sincronização.
+  - RATE_LIMIT_FULL_FLOW_PENDENTES (padrão "4/m") – rate limit do processamento de pendentes do full‑flow.
+  - RATE_LIMIT_TRANSFER_ANEXOS (padrão "12/m") – rate limit da task de transferência de anexos.
+  - RATE_LIMIT_PROCESSAR_TRANSFERENCIAS (padrão "4/m") – rate limit da task de processar pendências de anexos.
+  - RATE_LIMIT_ENCERRAR_PEDIDO (padrão "6/m") – rate limit da task de encerramento de pedido.
+- Limites/Resiliência Omie e DRF (Rate Limit / Cache):
+  - OMIE_MAX_RETRIES (padrão 3) – retentativas automáticas no cliente Omie para 429/5xx.
+  - OMIE_RETRY_BACKOFF_SECONDS (padrão 1.0) – backoff exponencial base.
+  - OMIE_RETRY_JITTER_MS (padrão 250) – jitter aleatório para evitar rajadas.
+  - DRF_THROTTLE_RATE_SUPPLIERS (padrão "6/min") – limite do endpoint GET /api/suppliers/.
+  - SUPPLIERS_CACHE_TTL_SECONDS (padrão 45) – TTL do cache de busca de fornecedores (em segundos).
+  - SUPPLIERS_MIN_QUERY_LEN (padrão 3) – comprimento mínimo do termo para consultar a Omie (termos menores retornam lista vazia sem chamar a Omie).
+  - SUPPLIERS_PER_PAGE (padrão 50) – quantidade de registros por página na chamada ListarClientes.
+  - SUPPLIERS_COOLDOWN_SECONDS (padrão 5) – tempo de resfriamento local aplicado após um 429 da Omie quando o header Retry-After não estiver presente.
 
 Atenção: não compartilhe credenciais reais em repositórios públicos. Gere e use chaves específicas para desenvolvimento.
 
@@ -182,6 +200,9 @@ Signals úteis:
 ## Cliente Omie (omie_api.client)
 
 - OmieAPIClient encapsula as chamadas com autenticação (app_key/secret) e trata erros (faultstring).
+- Resiliência: retentativas automáticas em 429/5xx e falhas de rede com backoff exponencial e respeito a Retry-After.
+ - Anti‑burst local: variável OMIE_MIN_INTERVAL_SECONDS (padrão 0.2s) aplica um espaçamento mínimo entre chamadas por processo (melhora quando o Celery está ativo).
+  - Quando esgotadas as tentativas, a exceção OmieAPIException agora carrega status_code e retry_after (quando fornecido pelo Omie), permitindo à view propagar 429 com cabeçalho Retry-After ao cliente.
 - Métodos relevantes:
   - listar_anexos(cTabela, nId)
   - obter_anexo(nIdAnexo) – retorna conteúdo base64 em cArquivo
@@ -208,6 +229,9 @@ Signals úteis:
 - Erro de conexão PostgreSQL: remova/ajuste DATABASE_URL para usar SQLite no dev.
 - Celery não processa: suba Redis e configure CELERY_BROKER_URL/RESULT_BACKEND.
 - Fuso horário/ZoneInfo no Windows: instale tzdata (já em requirements.txt).
+- 429 Too Many Requests na Omie ao buscar fornecedores: o endpoint /api/suppliers/ aplica throttling (DRF_THROTTLE_RATE_SUPPLIERS) e cache curto (SUPPLIERS_CACHE_TTL_SECONDS). Ajuste as variáveis conforme a necessidade. O cliente Omie também re-tenta automaticamente.
+ - Muitas requisições quando o Celery está rodando: ajuste os limites em settings (.env) – OMIE_MIN_INTERVAL_SECONDS para espaçar chamadas no cliente; defina RATE_LIMIT_* para tasks críticas e mantenha CELERY_WORKER_PREFETCH_MULTIPLIER=1. Isso reduz picos e evita 429 no backend da Omie.
+  - Além disso, o backend evita consultas à Omie para termos muito curtos (SUPPLIERS_MIN_QUERY_LEN) e ativa um cooldown local após receber 429 (SUPPLIERS_COOLDOWN_SECONDS ou Retry-After informado pelo Omie). Durante o cooldown, retornará 429 imediatamente com cabeçalho Retry-After quando possível.
 
 ## Segurança e Boas práticas
 

@@ -23,7 +23,7 @@ class AttachmentTransferService:
                 continue
         return 0
 
-    def transferir_anexos(self, origem_id: int, destino_id: int, origem_tabela: str = 'com-recebimento', destino_tabela: str = 'conta_a_pagar') -> AttachmentTransferLog:
+    def transferir_anexos(self, origem_id: int, destino_id: int, origem_tabela: str = 'com-recebimento', destino_tabela: str = 'conta-pagar') -> AttachmentTransferLog:
         inicio = time.monotonic()
         log = AttachmentTransferLog.objects.create(
             origem_tabela=origem_tabela,
@@ -74,8 +74,9 @@ class AttachmentTransferService:
                     sem_conteudo += 1
                     continue
                 try:
-                    self.client.incluir_anexo(
-                        tabela='conta_a_pagar', n_id=destino_id,
+                    # Usa caminho de compatibilidade baseado em Base64
+                    self.client.incluir_anexo_base64(
+                        tabela='conta-pagar', n_id=destino_id,
                         nome_arquivo=nome, arquivo_base64=base64_file
                     )
                     transferidos.append({'nome': nome, 'nIdAnexoOrigem': n_id_anexo, 'tamanho': tam})

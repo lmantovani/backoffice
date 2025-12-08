@@ -92,6 +92,8 @@ class AttachmentTransferViewSet(viewsets.ViewSet):
         n_id = request.data.get('n_id')
         nome_arquivo = request.data.get('nome_arquivo')
         arquivo_base64 = request.data.get('arquivo_base64')
+        # Observação: a Omie não aceita descrição no contrato de anexo; o client ignora este campo.
+        # Mantemos a leitura por compatibilidade de payloads antigos, mas não enviamos ao client.
         descricao = request.data.get('descricao')
 
         if not all([tabela, n_id, nome_arquivo, arquivo_base64]):
@@ -100,12 +102,12 @@ class AttachmentTransferViewSet(viewsets.ViewSet):
         try:
             from omie_api.client import OmieAPIClient
             client = OmieAPIClient()
-            resp = client.incluir_anexo(
+            # Usa o helper compatível com base64 já gerado no frontend
+            resp = client.incluir_anexo_base64(
                 tabela=tabela,
                 n_id=int(n_id),
                 nome_arquivo=nome_arquivo,
                 arquivo_base64=arquivo_base64,
-                descricao=descricao
             )
             return Response(resp)
         except Exception as e:

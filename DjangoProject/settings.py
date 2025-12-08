@@ -176,6 +176,14 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.JSONRenderer',
         'rest_framework.renderers.BrowsableAPIRenderer',
     ],
+    # Throttling para evitar bursts em endpoints sensíveis (ex.: suppliers search)
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.ScopedRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        # Ajustável por env DRF_THROTTLE_RATE_SUPPLIERS (ex.: '6/min')
+        'suppliers-search': config('DRF_THROTTLE_RATE_SUPPLIERS', default='6/min'),
+    },
 }
 
 # Logging Configuration
@@ -235,9 +243,60 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
+# Evita rajadas de tasks com grande prefetch; melhora fairness
+CELERY_WORKER_PREFETCH_MULTIPLIER = config('CELERY_WORKER_PREFETCH_MULTIPLIER', default=1, cast=int)
+CELERY_ACKS_LATE = config('CELERY_ACKS_LATE', default=True, cast=bool)
+
+# Rate limit de tasks mais "quentes" (configurável por env)
+CELERY_TASK_ANNOTATIONS = {
+    # Monitoramento do pedido até finalizar
+    'purchase_orders.tasks.monitorar_pedido_e_processar': {
+        'rate_limit': config('RATE_LIMIT_MONITOR_TASK', default='6/m')
+    },
+    # Robô de sincronização
+    'purchase_orders.tasks.robo_sincronizar_pedidos': {
+        'rate_limit': config('RATE_LIMIT_ROBO_TASK', default='2/m')
+    },
+    # Processar pendências do full-flow
+    'purchase_orders.tasks.full_flow_processar_pedidos_pendentes': {
+        'rate_limit': config('RATE_LIMIT_FULL_FLOW_PENDENTES', default='4/m')
+    },
+    # Transferência de anexos (assíncrona)
+    'attachments.tasks.transferir_anexos_task': {
+        'rate_limit': config('RATE_LIMIT_TRANSFER_ANEXOS', default='12/m')
+    },
+    # Processar transferências pendentes
+    'attachments.tasks.processar_transferencias_pendentes_task': {
+        'rate_limit': config('RATE_LIMIT_PROCESSAR_TRANSFERENCIAS', default='4/m')
+    },
+    # Encerramento de pedido (RF-002)
+    'purchase_orders.tasks.encerrar_pedido_task': {
+        'rate_limit': config('RATE_LIMIT_ENCERRAR_PEDIDO', default='6/m')
+    },
+}
 
 # Omie API Configuration
 OMIE_APP_KEY = config('OMIE_APP_KEY', default='')
 OMIE_APP_SECRET = config('OMIE_APP_SECRET', default='')
 OMIE_API_BASE_URL = config('OMIE_API_BASE_URL', default='https://app.omie.com.br/api/v1/')
+OMIE_MIN_INTERVAL_SECONDS = config('OMIE_MIN_INTERVAL_SECONDS', default=0.2, cast=float)
+
+# Cache (utilizado para buscas de fornecedores com TTL curto)
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'django-backoffice-cache',
+    }
+}
+
+# TTL (segundos) para cache de /api/suppliers/ (pode ajustar via env)
+SUPPLIERS_CACHE_TTL_SECONDS = config('SUPPLIERS_CACHE_TTL_SECONDS', default=45, cast=int)
+
+# Parâmetros adicionais do endpoint de fornecedores
+# Tamanho mínimo do termo de busca para disparar consulta na Omie (evita bursts com 1-2 letras)
+SUPPLIERS_MIN_QUERY_LEN = config('SUPPLIERS_MIN_QUERY_LEN', default=3, cast=int)
+# Registros por página usados na chamada à Omie (ListarClientes)
+SUPPLIERS_PER_PAGE = config('SUPPLIERS_PER_PAGE', default=50, cast=int)
+# Cooldown padrão (segundos) aplicado localmente após receber 429 da Omie, quando não houver Retry-After
+SUPPLIERS_COOLDOWN_SECONDS = config('SUPPLIERS_COOLDOWN_SECONDS', default=5, cast=int)
 

@@ -1,12 +1,13 @@
+import json
 import logging
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render, get_object_or_404
 from rest_framework import status, viewsets
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from django.contrib.auth.decorators import login_required
-from django.utils.decorators import method_decorator
-from django.shortcuts import render
 from rest_framework.views import APIView
+from django.conf import settings
 
 from .models import (
     PurchaseOrderClosureLog,
@@ -17,12 +18,21 @@ from .serializers import (
     PurchaseOrderClosureLogSerializer,
     PurchaseOrderIntegrationSerializer,
     PurchaseOrderFinanceMapSerializer,
+    PurchaseOrderFullFlowSerializer,
 )
+from omie_api.client import OmieAPIException, OmieAPIClient
 from .services import (
     FullFlowPurchaseOrderService,
     PurchaseOrderRobotService,
+    SupplierService,
+    PurchaseOrderClosureService,
+    CategoryService,
+    BuyerService,
+    ProductService,
 )
-from .services import SupplierService
+from .tasks import encerrar_pedido_task
+from .tasks import monitorar_pedido_e_processar
+
 
 logger = logging.getLogger(__name__)
 
@@ -110,10 +120,48 @@ class PurchaseOrderIntegrationViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=["post"], url_path="full-flow")
     def full_flow(self, request):
         service = FullFlowPurchaseOrderService()
-        pedido_data = request.data.get("pedido") or {}
+        raw_pedido = request.data.get("pedido")
+        if isinstance(raw_pedido, str):
+            try:
+                pedido_data = json.loads(raw_pedido)
+            except json.JSONDecodeError:
+                return Response(
+                    {"detail": "Campo 'pedido' deve conter um JSON válido."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        elif isinstance(raw_pedido, dict):
+            pedido_data = raw_pedido
+        else:
+            pedido_data = {}
+
+        serializer_input = PurchaseOrderFullFlowSerializer(data=pedido_data)
+        if not serializer_input.is_valid():
+            return Response(serializer_input.errors, status=status.HTTP_400_BAD_REQUEST)
+
         arquivos = request.FILES.getlist("anexos")
-        po = service.criar_pedido_com_anexos(pedido_data, arquivos)
-        service.processar_pedido_para_financeiro(po)
+
+        try:
+            po = service.criar_pedido_com_anexos(serializer_input.validated_data, arquivos)
+            # Tenta processar imediatamente; se ainda não finalizado, agenda monitoramento assíncrono
+            fmap = service.processar_pedido_para_financeiro(po)
+            if not fmap:
+                try:
+                    monitorar_pedido_e_processar.delay(po.id)
+                except Exception:
+                    logger.exception("Falha ao enfileirar monitoramento do pedido para processamento financeiro")
+        except OmieAPIException as exc:
+            logger.exception("Omie retornou erro ao executar full-flow de pedido")
+            return Response(
+                {"detail": f"Falha ao integrar com a Omie: {exc}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        except Exception:
+            logger.exception("Erro inesperado ao processar pedido full-flow")
+            return Response(
+                {"detail": "Erro interno ao processar o pedido. Tente novamente."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
         serializer = self.get_serializer(po)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -137,6 +185,82 @@ class SupplierListView(APIView):
 
     def get(self, request):
         search = request.query_params.get("search") or request.query_params.get("q") or ""
-        suppliers = SupplierService.list_suppliers(search=search)
+
+        try:
+            suppliers = SupplierService.list_suppliers(search=search)
+        except OmieAPIException as exc:
+            logger.exception("Erro ao consultar fornecedores na Omie")
+            return Response(
+                {"detail": f"Erro ao consultar fornecedores na Omie: {exc}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
         return Response(suppliers)
 
+class CategoryListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        search = request.query_params.get("search", "")
+        try:
+            data = CategoryService.list_categories(search)
+        except OmieAPIException as exc:
+            logger.exception("Erro ao listar categorias no Omie")
+            return Response({"detail": f"Erro ao consultar categorias: {exc}"}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response(data)
+
+
+class BuyerListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        search = request.query_params.get("search", "")
+        try:
+            data = BuyerService.list_buyers(search)
+        except OmieAPIException as exc:
+            logger.exception("Erro ao listar compradores no Omie")
+            return Response({"detail": f"Erro ao consultar compradores: {exc}"}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response(data)
+
+class ProductListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        search = request.query_params.get("search", "")
+        try:
+            page = int(request.query_params.get("page", 1))
+        except (TypeError, ValueError):
+            page = 1
+        try:
+            per_page = int(request.query_params.get("per_page", 50))
+        except (TypeError, ValueError):
+            per_page = 50
+        try:
+            data = ProductService.list_products(search, page=page, per_page=per_page)
+        except OmieAPIException as exc:
+            logger.exception("Erro ao listar produtos no Omie")
+            return Response({"detail": f"Erro ao consultar produtos: {exc}"}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response(data)
+
+
+# Endpoint simples de debug para listar anexos de um pedido de compra na Omie
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def listar_anexos_pedido(request, pk: int):
+    po = get_object_or_404(PurchaseOrderIntegration, pk=pk)
+    if not po.ncodped_omie:
+        return Response({"detail": "Pedido local não possui ncodped_omie registrado."}, status=status.HTTP_400_BAD_REQUEST)
+
+    client = OmieAPIClient.from_settings()
+    try:
+        # Omie usa cTabela="pedido-compra" e identificador do documento (nCodPed) no campo nCodigo/nId conforme o método
+        anexos = client.listar_anexos("pedido-compra", po.ncodped_omie)
+    except OmieAPIException as exc:
+        logger.exception("Erro ao listar anexos do pedido %s na Omie", po.ncodped_omie)
+        return Response({"detail": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
+    return Response({
+        "pedido_local_id": po.id,
+        "ncodped_omie": po.ncodped_omie,
+        "anexos": anexos,
+    })
